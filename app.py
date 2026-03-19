@@ -17,7 +17,7 @@ app.config['SECRET_KEY'] = 'a-very-secret-key'  # Remember to change this
 
 # Auto-logout after inactivity (forces re-authentication).
 # Cart will still be restored from browser localStorage on return to /sales.
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=10)
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 
