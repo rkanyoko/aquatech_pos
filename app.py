@@ -11,9 +11,11 @@ from flask import Flask, render_template, request, redirect, url_for, flash, abo
 from werkzeug.security import check_password_hash, generate_password_hash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from functools import wraps
+from dotenv import load_dotenv
+load_dotenv()
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'a-very-secret-key'  # Remember to change this
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-only-change-me')
 
 # Auto-logout after inactivity (forces re-authentication).
 # Cart will still be restored from browser localStorage on return to /sales.
