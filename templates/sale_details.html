@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Sale Details</title>
+    <style>
+        body { font-family: sans-serif; margin: 2em; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1em; }
+        th, td { border: 1px solid #dddddd; text-align: left; padding: 8px; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+        h1, h2 { color: #333; }
+        .summary { background-color: #f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; }
+        a { color: #008CBA; text-decoration: none; }
+    </style>
+</head>
+<body>
+
+    <a href="{{ url_for('reports') }}">&larr; Back to Sales History</a>
+    <span style="float:right; margin-top: -5px;">
+        <a href="{{ url_for('sale_receipt', sale_id=sale.id) }}" target="_blank" style="color:#007bff; text-decoration:none;">Print Receipt</a>
+    </span>
+
+    <div class="summary">
+        <h1>Sale #{{ sale.id }}</h1>
+        <p><strong>Date:</strong> {{ sale.timestamp }}</p>
+        <h2>Total Amount: Ksh. {{ sale.total_amount }}</h2>
+    </div>
+
+    <h2>Items Sold</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Product SKU</th>
+                <th>Product Name</th>
+                <th>Quantity Sold</th>
+                <th>Price Per Unit</th>
+                <th>Subtotal</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Loop through the specific items for this sale -->
+            {% for item in items %}
+            <tr>
+                <td>{{ item.sku }}</td>
+                <td>{{ item.name }}</td>
+                <td>{{ item.quantity_sold }}</td>
+                <td>Ksh. {{ item.price_per_unit }}</td>
+                <td>Ksh. {{ item.quantity_sold * item.price_per_unit }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+</body>
+</html>

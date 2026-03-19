@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Special Orders{% endblock %}
+
+{% block content %}
+    <style>
+        .container { display: flex; gap: 2em; }
+        .form-section { flex: 1; }
+        .list-section { flex: 2; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 2em; }
+        th, td { border: 1px solid #dddddd; text-align: left; padding: 8px; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+        h1, h2 { color: #333; }
+        form { background-color: #f9f9f9; padding: 20px; border-radius: 5px; border: 1px solid #ddd; }
+        input[type=text], input[type=number], select, textarea { width: 100%; padding: 8px; margin: 6px 0; display: inline-block; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        input[type=submit] { background-color: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+        .action-btn { background-color: #28a745; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+    </style>
+
+    <h1>Special Customer Orders</h1>
+
+    <div class="container">
+        <div class="form-section">
+            <h2>Create New Special Order</h2>
+            <form method="post">
+                <label for="customer_id">Customer:</label>
+                <select id="customer_id" name="customer_id" required>
+                    {% for customer in customers %}
+                    <option value="{{ customer.id }}">{{ customer.name }}</option>
+                    {% endfor %}
+                </select>
+
+                <label for="product_name">Product Name:</label>
+                <input type="text" id="product_name" name="product_name" required>
+
+                <label for="quantity">Quantity:</label>
+                <input type="number" id="quantity" name="quantity" min="1" value="1" required>
+
+                <label for="details">Details / Specifics:</label>
+                <textarea id="details" name="details" rows="4"></textarea>
+
+                <input type="submit" value="Place Order">
+            </form>
+        </div>
+
+        <div class="list-section">
+            <h2>Pending Orders</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Customer</th>
+                        <th>Product</th>
+                        <th>Qty</th>
+                        <th>Details</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in pending_orders %}
+                    <tr>
+                        <td>{{ order.customer_name }}</td>
+                        <td>{{ order.product_name }}</td>
+                        <td>{{ order.quantity }}</td>
+                        <td>{{ order.details }}</td>
+                        <td>
+                            {% if current_user.role == 'Admin' %}
+                            <form action="{{ url_for('update_order_status', order_id=order.id) }}" method="post" style="display:inline;">
+                                <input type="hidden" name="new_status" value="Arrived">
+                                <button type="submit" class="action-btn">Mark Arrived</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" style="text-align:center;">No pending orders.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <h2>Arrived Orders</h2>
+            <table>
+                <thead>
+                    <tr><th>Customer</th><th>Product</th><th>Qty</th><th>Action</th></tr>
+                </thead>
+                <tbody>
+                     {% for order in arrived_orders %}
+                    <tr>
+                        <td>{{ order.customer_name }}</td>
+                        <td>{{ order.product_name }}</td>
+                        <td>{{ order.quantity }}</td>
+                        <td>
+                            {% if current_user.role == 'Admin' %}
+                            <form action="{{ url_for('update_order_status', order_id=order.id) }}" method="post" style="display:inline;">
+                                <input type="hidden" name="new_status" value="Completed">
+                                <button type="submit" class="action-btn">Mark Completed</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" style="text-align:center;">No orders have arrived yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endblock %} <!-- This was the missing line -->

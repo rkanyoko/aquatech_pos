@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+    <!-- We are reusing the exact same styles and HTML from before, just inside the block -->
+    <style>
+        .header { margin-bottom: 2em; }
+        .header h1 { margin: 0; }
+        .dashboard-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .card { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .card h2 { margin-top: 0; color: #333; }
+        .metric { font-size: 2.5em; font-weight: bold; color: #0056b3; }
+        .nav-card a { display: block; background-color: #007bff; color: white; text-decoration: none; padding: 15px; margin-bottom: 10px; border-radius: 5px; text-align: center; font-weight: bold; }
+        .nav-card a:hover { background-color: #0056b3; }
+        .low-stock-list { padding-left: 0; }
+        .low-stock-list li { list-style-type: none; padding: 5px 0; border-bottom: 1px solid #eee; }
+        .low-stock-list span { color: #dc3545; font-weight: bold; }
+    </style>
+
+    <div class="header">
+        <h1>Aqua Tech Limited</h1>
+        <p>Where we solve all your building and water problems with genuine products</p>
+    </div>
+
+    <div class="dashboard-container">
+        {% if current_user.role == 'Admin' %}
+        <div class="card">
+            <h2>Total Sales Today</h2>
+            <p class="metric">Ksh. {{ sales_today }}</p>
+        </div>
+        <div class="card">
+            <h2>Total Outstanding Debt</h2>
+            <p class="metric">Ksh. {{ total_debt }}</p>
+        </div>
+        {% endif %}
+
+        <!-- We can remove the "Quick Actions" card now, as those links are in the main navbar! -->
+
+        <div class="card">
+            <h2>Low Stock Items</h2>
+            {% if low_stock_items %}
+                <ul class="low-stock-list">
+                    {% for item in low_stock_items %}
+                        <li>{{ item.name }} - <span>Only {{ item.quantity }} left!</span></li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>No items are currently low on stock. Well done!</p>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}

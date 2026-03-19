@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Debt Report{% endblock %}
+
+{% block content %}
+    <style>
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #dddddd; text-align: left; padding: 8px; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+        h1 { color: #333; }
+        .total-debt { background-color: #fff3cd; border: 1px solid #ffeeba; padding: 15px; margin-top: 1em; border-radius: 5px; }
+        .payment-btn { background-color: #007bff; color: white; padding: 5px 10px; border-radius: 4px; text-decoration: none; }
+        .filter-form {
+            margin-bottom: 1em;
+            padding: 10px;
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+
+    <h1>Outstanding Debts Report</h1>
+
+    <form class="filter-form" method="get">
+        <label>Customer:
+            <input type="text" name="customer" value="{{ customer_query }}" placeholder="Customer name">
+        </label>
+        <button type="submit">Search</button>
+        <a href="{{ url_for('export_debt_report', customer=customer_query) }}">Download CSV</a>
+    </form>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Sale ID</th>
+                <th>Customer Name</th>
+                <th>Date of Sale</th>
+                <th>Original Amount</th>
+                <th>Amount Paid</th>
+                <th>Current Balance</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for debt in debts %}
+            <tr>
+                <td>{{ debt.id }}</td>
+                <td>{{ debt.name }}</td>
+                <td>{{ debt.timestamp }}</td>
+                <td>Ksh. {{ "%.2f"|format(debt.total_amount) }}</td>
+                <td>Ksh. {{ "%.2f"|format(debt.amount_paid) }}</td>
+                <td><strong>Ksh. {{ "%.2f"|format(debt.balance) }}</strong></td>
+                <td>
+                    <a href="{{ url_for('record_payment', sale_id=debt.id) }}" class="payment-btn">Record Payment</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="total-debt">
+        <h2>Total Outstanding Debt: Ksh. {{ "%.2f"|format(total_debt_amount) }}</h2>
+    </div>
+{% endblock %}

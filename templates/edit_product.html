@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Product{% endblock %}
+
+{% block content %}
+    <style>
+        h1 { color: #333; }
+        form {
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        input[type=text], input[type=number] {
+            width: 100%;
+            padding: 8px;
+            margin: 6px 0;
+            display: inline-block;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        input[type=submit] {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+
+    <h1>Edit Product: {{ product.name }}</h1>
+
+    <form method="post">
+        <label for="name">Product Name:</label>
+        <input type="text" id="name" name="name" value="{{ product.name }}" required>
+
+        <label for="description">Description:</label>
+        <input type="text" id="description" name="description" value="{{ product.description }}">
+
+        <label for="sku">SKU:</label>
+        <input type="text" id="sku" name="sku" value="{{ product.sku }}" required>
+
+        <label for="price">Price (Ksh.):</label>
+        <input type="number" id="price" name="price" step="1" value="{{ product.price }}" required>
+
+        <input type="submit" value="Save Changes">
+    </form>
+{% endblock %}

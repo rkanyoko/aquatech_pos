@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}Receipt #{{ sale.id }}{% endblock %}
+
+{% block content %}
+    <style>
+        .receipt-wrapper {
+            max-width: 420px;
+            margin: 0 auto;
+        }
+        .receipt-card {
+            background-color: #ffffff;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(15, 52, 96, 0.12);
+            font-size: 0.9rem;
+        }
+        .receipt-header {
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+        .receipt-header h1 {
+            margin: 0;
+            font-size: 1.4rem;
+        }
+        .receipt-header p {
+            margin: 2px 0;
+        }
+        .receipt-meta {
+            margin-bottom: 0.8rem;
+        }
+        .receipt-meta div {
+            display: flex;
+            justify-content: space-between;
+        }
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0.5rem 0 0.8rem 0;
+        }
+        .items-table th,
+        .items-table td {
+            border: 1px solid #e1e7f0;
+            padding: 4px 6px;
+            font-size: 0.85rem;
+        }
+        .items-table th {
+            background-color: #f1f7fb;
+        }
+        .totals {
+            margin-top: 0.5rem;
+        }
+        .totals div {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 2px;
+        }
+        .totals div.total-line {
+            font-weight: bold;
+        }
+        .thankyou {
+            margin-top: 1rem;
+            text-align: center;
+            font-style: italic;
+        }
+        .print-actions {
+            text-align: center;
+            margin-top: 1rem;
+        }
+
+        @media print {
+            .navbar,
+            .print-actions {
+                display: none !important;
+            }
+            body {
+                background: #ffffff;
+            }
+            .content {
+                padding: 0;
+                margin: 0;
+            }
+            .receipt-wrapper {
+                margin: 0;
+            }
+            .receipt-card {
+                box-shadow: none;
+                border-radius: 0;
+            }
+        }
+    </style>
+
+    <div class="receipt-wrapper">
+        <div class="receipt-card">
+            <div class="receipt-header">
+                <h1>Aqua Tech POS</h1>
+                <p>Quality plumbing & water solutions</p>
+                <p>Tel: 0723171419 | Email: aquatechplumbing@gmail.com</p>
+                <p>Location:Kajiado town, 50 meters from Bata store kajiado.</p>
+            </div>
+
+            <div class="receipt-meta">
+                <div>
+                    <span><strong>Receipt #</strong> {{ sale.id }}</span>
+                    <span><strong>Date</strong> {{ sale.timestamp }}</span>
+                </div>
+                <div>
+                    <span><strong>Customer</strong> {{ sale.customer_name }}</span>
+                    <span><strong>Phone</strong> {{ sale.customer_phone or '-' }}</span>
+                </div>
+                <div>
+                    <span><strong>Status</strong> {{ sale.payment_status }}</span>
+                    <span><strong>Served by</strong> {{ sale.cashier_username or '-' }}</span>
+                </div>
+            </div>
+
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Qty</th>
+                        <th>Price</th>
+                        <th>Subtot.</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set running_total = 0 %}
+                    {% for item in items %}
+                        {% set line_total = item.quantity_sold * item.price_per_unit %}
+                        {% set running_total = running_total + line_total %}
+                        <tr>
+                            <td>{{ item.name }}</td>
+                            <td>{{ item.quantity_sold }}</td>
+                            <td>{{ "%.2f"|format(item.price_per_unit) }}</td>
+                            <td>{{ "%.2f"|format(line_total) }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="totals">
+                <div>
+                    <span>Subtotal</span>
+                    <span>Ksh. {{ "%.2f"|format(running_total) }}</span>
+                </div>
+                <div class="total-line">
+                    <span>Total</span>
+                    <span>Ksh. {{ "%.2f"|format(sale.total_amount) }}</span>
+                </div>
+            </div>
+
+            <div class="thankyou">
+                <p><b>Please confirm your order before leaving the shop</b></p>
+                <p>Thank you for shopping at Aqua Tech.</p>
+                <p>we value every customer and evey purchase.</p>
+                <p>For any issues, kindly retain this receipt.</p>
+            </div>
+        </div>
+
+        <div class="print-actions">
+            <button class="btn-primary" onclick="window.print()">Print Receipt</button>
+        </div>
+    </div>
+{% endblock %}
+

@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+
+{% block title %}New Sale{% endblock %}
+
+{% block content %}
+    <style>
+        .container { display: flex; width: 100%; }
+        .product-list { width: 60%; padding-right: 20px; box-sizing: border-box; }
+        .sale-cart { width: 40%; background-color: #f9f9f9; padding: 20px; border-radius: 5px; border: 1px solid #ddd; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+        h1, h2 { color: #333; }
+        .add-btn { background-color: #008CBA; color: white; padding: 5px 10px; border: none; cursor: pointer; border-radius: 4px; }
+        .submit-sale { background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; width: 100%; margin-top: 1em;}
+        #cart-items li { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        select, .payment-options { width: 100%; padding: 8px; margin-bottom: 1em; border: 1px solid #ccc; border-radius: 4px; }
+        .payment-options label { margin-right: 15px; }
+        .qty-input { width: 60px; text-align: center; }
+        .edit-btn { background: none; border: none; cursor: pointer; color: #007bff; font-size: 0.8em; padding: 0 5px; }
+    </style>
+
+    <div class="container">
+        <div class="product-list">
+            <h2>Available Products</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Price (Ksh.)</th>
+                        <th>In Stock</th>
+                        <th>Quantity</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for product in products %}
+                    <tr>
+                        <td>{{ product.name }}</td>
+                        <td>{{ product.price }}</td>
+                        <td>{{ product.quantity }}</td>
+                        <td>
+                            <input type="number" class="qty-input" value="1" min="1" id="qty-{{ product.id }}">
+                        </td>
+                        <td>
+                            <button class="add-btn" 
+                                    data-id="{{ product.id }}" 
+                                    data-name="{{ product.name }}" 
+                                    data-price="{{ product.price }}"
+                                    data-stock="{{ product.quantity }}">
+                                Add to Cart
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="sale-cart">
+            <h2>Current Sale</h2>
+            <form id="sale-form" action="/process_sale" method="post">
+                <label for="customer">Customer:</label>
+                <select id="customer" name="customer_id" required>
+                    {% for customer in customers %}
+                    <option value="{{ customer.id }}">{{ customer.name }}</option>
+                    {% endfor %}
+                </select>
+                <ul id="cart-items"></ul>
+                <hr>
+                <h3>Total: Ksh. <span id="total-price">0.00</span></h3>
+                <div class="payment-options">
+                    <strong>Payment Status:</strong>
+                    <label><input type="radio" name="payment_status" value="Paid" checked> Paid</label>
+                    <label><input type="radio" name="payment_status" value="On Credit"> On Credit</label>
+                </div>
+                <input type="hidden" name="total_amount" id="total_amount_input" value="0">
+                <input type="hidden" name="cart_data" id="cart_data_input">
+                <input type="submit" value="Complete Sale" class="submit-sale">
+            </form>
+        </div>
+    </div>
+
+<script>
+    const addButtons = document.querySelectorAll('.add-btn');
+    const cartItemsList = document.getElementById('cart-items');
+    const totalPriceSpan = document.getElementById('total-price');
+    const totalAmountInput = document.getElementById('total_amount_input');
+    const cartDataInput = document.getElementById('cart_data_input');
+    const saleForm = document.getElementById('sale-form');
+
+    const CART_KEY = `aquatech_cart_${"{{ current_user.username }}"}`
+    const CART_META_KEY = `aquatech_cart_meta_${"{{ current_user.username }}"}`
+    let cart = {};
+
+    function saveCartToStorage() {
+        try {
+            localStorage.setItem(CART_KEY, JSON.stringify(cart));
+            localStorage.setItem(CART_META_KEY, JSON.stringify({
+                customer_id: document.getElementById('customer')?.value || null,
+                payment_status: document.querySelector('input[name="payment_status"]:checked')?.value || 'Paid',
+                saved_at: new Date().toISOString(),
+            }));
+        } catch (e) {}
+    }
+
+    function loadCartFromStorage() {
+        try {
+            const raw = localStorage.getItem(CART_KEY);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === 'object') {
+                    cart = parsed;
+                }
+            }
+            const metaRaw = localStorage.getItem(CART_META_KEY);
+            if (metaRaw) {
+                const meta = JSON.parse(metaRaw);
+                if (meta?.customer_id) {
+                    const customerEl = document.getElementById('customer');
+                    if (customerEl) customerEl.value = meta.customer_id;
+                }
+                if (meta?.payment_status) {
+                    const radio = document.querySelector(`input[name="payment_status"][value="${meta.payment_status}"]`);
+                    if (radio) radio.checked = true;
+                }
+            }
+        } catch (e) {}
+    }
+
+    // Restore cart on page load (helps when session expires / user re-logs in)
+    loadCartFromStorage();
+    addButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const productId = button.dataset.id;
+            const productName = button.dataset.name;
+            const productPrice = parseInt(button.dataset.price);
+            const availableStock = parseInt(button.dataset.stock);
+            const qtyInput = document.getElementById(`qty-${productId}`);
+            const quantityToAdd = parseInt(qtyInput.value);
+            if (quantityToAdd <= 0) { alert("Please enter a valid quantity."); return; }
+            const currentCartQty = cart[productId] ? cart[productId].quantity : 0;
+            if ((currentCartQty + quantityToAdd) > availableStock) { alert(`Error: Cannot add ${quantityToAdd}. You only have ${availableStock - currentCartQty} available in stock.`); return; }
+            if (cart[productId]) { cart[productId].quantity += quantityToAdd; } else { cart[productId] = { name: productName, price: productPrice, quantity: quantityToAdd, stock: availableStock }; }
+            updateCart();
+        });
+    });
+    function updateCart() {
+        cartItemsList.innerHTML = '';
+        let total = 0;
+        for (const id in cart) {
+            const item = cart[id];
+            const li = document.createElement('li');
+            const adminEditButton = `{% if current_user.role == 'Admin' %}<button type="button" class="edit-btn" data-id="${id}">Edit Price</button>{% endif %}`;
+            li.innerHTML = `<span>${item.name}</span><div><input type="number" class="cart-qty-input" value="${item.quantity}" min="1" data-id="${id}" style="width: 50px;"><span>Ksh. ${ (item.price * item.quantity).toFixed(2) }</span>${adminEditButton}</div>`;
+            cartItemsList.appendChild(li);
+            total += item.price * item.quantity;
+        }
+        totalPriceSpan.innerText = total.toFixed(2);
+        totalAmountInput.value = total;
+        cartDataInput.value = JSON.stringify(cart);
+        attachCartQuantityListeners();
+        attachPriceEditListeners();
+        saveCartToStorage();
+    }
+    function attachPriceEditListeners() {
+        document.querySelectorAll('.edit-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                const productId = button.dataset.id;
+                const item = cart[productId];
+                const currentTotal = item.price * item.quantity;
+                const newTotalStr = prompt(`Enter new total price for ${item.quantity} x ${item.name}:`, currentTotal.toFixed(2));
+                if (newTotalStr) {
+                    const newTotal = parseFloat(newTotalStr);
+                    if (!isNaN(newTotal) && newTotal >= 0) {
+                        cart[productId].price = newTotal / item.quantity;
+                        updateCart();
+                    } else { alert("Invalid price entered."); }
+                }
+            });
+        });
+    }
+    function attachCartQuantityListeners() {
+        document.querySelectorAll('.cart-qty-input').forEach(input => {
+            input.addEventListener('change', () => {
+                const productId = input.dataset.id;
+                let newQuantity = parseInt(input.value);
+                if (newQuantity > cart[productId].stock) {
+                    alert(`Error: You only have ${cart[productId].stock} items in stock.`);
+                    newQuantity = cart[productId].stock;
+                    input.value = newQuantity;
+                }
+                if (newQuantity <= 0) { delete cart[productId]; } else { cart[productId].quantity = newQuantity; }
+                updateCart();
+            });
+        });
+    }
+    saleForm.addEventListener('submit', function(event) {
+        const customerId = document.getElementById('customer').value;
+        const paymentStatus = document.querySelector('input[name="payment_status"]:checked').value;
+        if (customerId === '1' && paymentStatus === 'On Credit') {
+            event.preventDefault();
+            if (confirm("A walk-in customer cannot buy on credit. Register them as a new customer?")) {
+                window.location.href = "{{ url_for('customers') }}";
+            }
+        }
+    });
+
+    // Keep meta up to date even if cart unchanged
+    document.getElementById('customer').addEventListener('change', saveCartToStorage);
+    document.querySelectorAll('input[name="payment_status"]').forEach(r => r.addEventListener('change', saveCartToStorage));
+
+    // Clear saved cart only when we actually submit a valid sale
+    saleForm.addEventListener('submit', function(event) {
+        if (event.defaultPrevented) return;
+        try {
+            localStorage.removeItem(CART_KEY);
+            localStorage.removeItem(CART_META_KEY);
+        } catch (e) {}
+    });
+
+    // First render after restore
+    updateCart();
+</script>
+{% endblock %}

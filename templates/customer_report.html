@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Customer Report{% endblock %}
+
+{% block content %}
+    <style>
+        .summary { background-color: #f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; margin-bottom: 2em; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #dddddd; text-align: left; padding: 8px; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+        .status-paid { color: green; }
+        .status-on-credit { color: red; }
+    </style>
+
+    <div class="summary">
+        <h1>Transaction History for {{ customer.name }}</h1>
+        <p><strong>Phone:</strong> {{ customer.phone or 'N/A' }}</p>
+        <p><strong>Email:</strong> {{ customer.email or 'N/A' }}</p>
+    </div>
+
+    <h2>Sales Records</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Sale ID</th>
+                <th>Date</th>
+                <th>Total Amount</th>
+                <th>Payment Status</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for sale in sales %}
+            <tr>
+                <td>{{ sale.id }}</td>
+                <td>{{ sale.timestamp }}</td>
+                <td>Ksh. {{ "%.2f"|format(sale.total_amount) }}</td>
+                <td class="status-{{ sale.payment_status.lower().replace(' ', '-') }}">
+                    <strong>{{ sale.payment_status }}</strong>
+                </td>
+                <td>
+                    <!-- Admins can see the full sale details -->
+                    {% if current_user.role == 'Admin' %}
+                    <a href="{{ url_for('sale_details', sale_id=sale.id) }}">View Items</a>
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="5" style="text-align: center;">This customer has no transaction history.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

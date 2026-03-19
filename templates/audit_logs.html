@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Logs{% endblock %}
+
+{% block content %}
+    <style>
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .toolbar input[type=text] {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+        }
+        .small {
+            color: #516071;
+            font-size: 0.9rem;
+        }
+    </style>
+
+    <h1>Audit Logs</h1>
+    <p class="small">Showing latest 500 events (EAT).</p>
+
+    <form class="toolbar" method="get">
+        <input type="text" name="q" value="{{ q }}" placeholder="Search: username, action, entity, details">
+        <button type="submit">Search</button>
+        <a href="{{ url_for('audit_logs') }}">Clear</a>
+    </form>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>User</th>
+                <th>Role</th>
+                <th>Action</th>
+                <th>Entity</th>
+                <th>Entity ID</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in logs %}
+            <tr>
+                <td>{{ row.timestamp }}</td>
+                <td>{{ row.username or '-' }}</td>
+                <td>{{ row.role or '-' }}</td>
+                <td><strong>{{ row.action }}</strong></td>
+                <td>{{ row.entity_type or '-' }}</td>
+                <td>{{ row.entity_id or '-' }}</td>
+                <td>{{ row.details or '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}
+

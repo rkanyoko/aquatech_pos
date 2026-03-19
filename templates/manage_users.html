@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}User Management{% endblock %}
+
+{% block content %}
+    <style>
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #dddddd; text-align: left; padding: 8px; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+        h1, h2 { color: #333; }
+        form { background-color: #f9f9f9; padding: 20px; border-radius: 5px; border: 1px solid #ddd; margin-bottom: 2em;}
+        input[type=text], input[type=password], select { width: 100%; padding: 8px; margin: 6px 0; display: inline-block; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        input[type=submit] { background-color: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+        input[type=submit]:hover { background-color: #0056b3; }
+    </style>
+
+    <h1>User Management</h1>
+
+    <h2>Add New User</h2>
+    <form action="{{ url_for('add_user') }}" method="post">
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username" required>
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required>
+        <label for="role">Role:</label>
+        <select id="role" name="role">
+            <option value="Worker">Worker</option>
+            <option value="Admin">Admin</option>
+        </select>
+        <input type="submit" value="Create User">
+    </form>
+
+    <h2>Existing Users</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Role</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td>{{ user.username }}</td>
+                <td>{{ user.role }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}```
+
+---
+

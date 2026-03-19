@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- The title will be defined by each individual page -->
+    <title>{% block title %}{% endblock %} - Aqua Tech POS</title>
+    <style>
+        :root {
+            --primary: #0077b6;      /* deep water blue */
+            --primary-dark: #005b8a;
+            --accent: #00b4d8;       /* bright aqua */
+            --accent-soft: #caf0f8;
+            --bg: #f4f9fc;
+            --text-main: #16324f;
+            --danger: #d62828;
+            --success: #198754;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: radial-gradient(circle at top left, #e0f7ff 0, #f4f9fc 40%, #ffffff 100%);
+            color: var(--text-main);
+            margin: 0;
+        }
+
+        .navbar {
+            background: linear-gradient(90deg, var(--primary-dark), var(--primary));
+            overflow: hidden;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+        }
+
+        .navbar a {
+            float: left;
+            display: block;
+            color: #e3f2fd;
+            text-align: center;
+            padding: 14px 20px;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .navbar a:hover {
+            background-color: rgba(202, 240, 248, 0.18);
+            color: #ffffff;
+        }
+
+        .navbar .right {
+            float: right;
+        }
+
+        .content {
+            padding: 2rem;
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        /* Generic helpers for a consistent theme */
+        .card {
+            background-color: #ffffff;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 6px rgba(15, 52, 96, 0.08);
+        }
+
+        h1, h2, h3 {
+            color: var(--text-main);
+        }
+
+        .btn-primary,
+        input[type=submit],
+        button[type=submit] {
+            background-color: var(--primary);
+            color: #ffffff;
+            padding: 0.5rem 1.1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .btn-primary:hover,
+        input[type=submit]:hover,
+        button[type=submit]:hover {
+            background-color: var(--primary-dark);
+        }
+
+        .btn-danger {
+            background-color: var(--danger);
+            color: #ffffff;
+            border: none;
+            border-radius: 4px;
+            padding: 0.4rem 0.9rem;
+            cursor: pointer;
+        }
+
+        .btn-danger:hover {
+            background-color: #b71c1c;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 4px rgba(15, 52, 96, 0.06);
+        }
+
+        th, td {
+            border: 1px solid #e1e7f0;
+            text-align: left;
+            padding: 8px 10px;
+        }
+
+        th {
+            background-color: var(--accent-soft);
+            color: var(--text-main);
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8fcff;
+        }
+
+        a {
+            color: var(--primary);
+        }
+
+        a:hover {
+            color: var(--primary-dark);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="navbar">
+        <a href="{{ url_for('dashboard') }}">Dashboard</a>
+        
+        <!-- Links for all logged-in users -->
+        <a href="{{ url_for('sales') }}">New Sale</a>
+        <a href="{{ url_for('customers') }}">Customers</a>
+        <a href="{{ url_for('special_orders') }}">Special Orders</a>
+
+        <!-- Links for Admins only -->
+        {% if current_user.role == 'Admin' %}
+            <a href="{{ url_for('products') }}">Products</a>
+            <a href="{{ url_for('reports') }}">Reports</a>
+            <a href="{{ url_for('debt_report') }}">Debt Report</a>
+            <a href="{{ url_for('audit_logs') }}">Audit Logs</a>
+            <a href="{{ url_for('manage_users') }}">Users</a>
+        {% endif %}
+
+        <div class="right">
+           <a href="#"><b>Account</b>: <i>{{ current_user.username }}</i> ({{ current_user.role }})</a>
+            <a href="{{ url_for('logout') }}">Logout</a>
+        </div>
+    </div>
+
+    <div class="content">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div>
+                    {% for category, message in messages %}
+                        <div style="padding:10px; margin-bottom:10px; border-radius:4px;
+                                    {% if category == 'error' %}background-color:#f8d7da; color:#721c24; border:1px solid #f5c6cb;
+                                    {% elif category == 'success' %}background-color:#d4edda; color:#155724; border:1px solid #c3e6cb;
+                                    {% else %}background-color:#cce5ff; color:#004085; border:1px solid #b8daff;{% endif %}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <!-- This is where the content of each individual page will go -->
+        {% block content %}{% endblock %}
+    </div>
+
+</body>
+</html>
