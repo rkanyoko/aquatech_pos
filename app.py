@@ -75,6 +75,119 @@ def get_db_connection():
     return conn
 
 
+def init_db():
+    """
+    Create all tables if missing (fresh deploy / empty SQLite file on Azure).
+    Matches schema from database_setup.py, plus cashier_username on sales.
+    Seeds default categories, walk-in customer, and first admin when DB is empty.
+    """
+    conn = get_db_connection()
+    conn.executescript(
+        '''
+        CREATE TABLE IF NOT EXISTS categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            code TEXT NOT NULL UNIQUE
+        );
+
+        CREATE TABLE IF NOT EXISTS products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT,
+            sku TEXT UNIQUE,
+            price INTEGER NOT NULL,
+            quantity INTEGER NOT NULL,
+            category_id INTEGER,
+            FOREIGN KEY (category_id) REFERENCES categories (id)
+        );
+
+        CREATE TABLE IF NOT EXISTS customers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            phone TEXT,
+            email TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'Worker'
+        );
+
+        CREATE TABLE IF NOT EXISTS sales (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            total_amount REAL NOT NULL,
+            payment_status TEXT NOT NULL DEFAULT 'Paid',
+            customer_id INTEGER,
+            cashier_username TEXT,
+            FOREIGN KEY (customer_id) REFERENCES customers (id)
+        );
+
+        CREATE TABLE IF NOT EXISTS sale_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sale_id INTEGER NOT NULL,
+            product_id INTEGER NOT NULL,
+            quantity_sold INTEGER NOT NULL,
+            price_per_unit INTEGER NOT NULL,
+            FOREIGN KEY (sale_id) REFERENCES sales (id),
+            FOREIGN KEY (product_id) REFERENCES products (id)
+        );
+
+        CREATE TABLE IF NOT EXISTS payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sale_id INTEGER NOT NULL,
+            amount_paid REAL NOT NULL,
+            payment_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (sale_id) REFERENCES sales (id)
+        );
+
+        CREATE TABLE IF NOT EXISTS special_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_id INTEGER NOT NULL,
+            product_name TEXT NOT NULL,
+            quantity INTEGER NOT NULL,
+            details TEXT,
+            order_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+            status TEXT NOT NULL DEFAULT 'Pending',
+            FOREIGN KEY (customer_id) REFERENCES customers (id)
+        );
+        '''
+    )
+
+    # Default categories (same as database_setup.py)
+    for name, code in [
+        ('Pipes', 'PP'),
+        ('Taps', 'TAP'),
+        ('Sinks', 'SNK'),
+        ('Toilet Bowls', 'TB'),
+        ('Accessories', 'ACC'),
+    ]:
+        try:
+            conn.execute('INSERT INTO categories (name, code) VALUES (?, ?)', (name, code))
+        except sqlite3.IntegrityError:
+            pass
+
+    # Default walk-in customer (id=1 expected by templates / credit checks)
+    if conn.execute('SELECT 1 FROM customers LIMIT 1').fetchone() is None:
+        conn.execute(
+            "INSERT INTO customers (name, phone) VALUES ('Cash Sale / Walk-in', 'N/A')",
+        )
+
+    # First admin only when no users exist (e.g. new Azure deploy)
+    if conn.execute('SELECT 1 FROM users LIMIT 1').fetchone() is None:
+        admin_user = os.environ.get('INITIAL_ADMIN_USERNAME', 'admin')
+        admin_pass_plain = os.environ.get('INITIAL_ADMIN_PASSWORD', 'ChangeThisPassword!')
+        conn.execute(
+            'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
+            (admin_user, generate_password_hash(admin_pass_plain), 'Admin'),
+        )
+
+    conn.commit()
+    conn.close()
+
+
 def ensure_audit_logs_table():
     conn = get_db_connection()
     conn.execute(
@@ -130,6 +243,8 @@ def ensure_sales_has_cashier_username_column():
     conn.close()
 
 
+# Order matters: full schema first, then migrations for older DBs, then audit table.
+init_db()
 ensure_sales_has_cashier_username_column()
 ensure_audit_logs_table()
 
