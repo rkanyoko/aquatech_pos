@@ -794,12 +794,110 @@ def settle_debt(sale_id):
     audit_log("debt_settled", entity_type="sale", entity_id=sale_id)
     return redirect(url_for('debt_report'))
 
+def _validate_new_password_pair(new_pw, confirm_pw):
+    """Return (ok, error_message)."""
+    if not new_pw or len(new_pw) < 8:
+        return False, "New password must be at least 8 characters."
+    if new_pw != confirm_pw:
+        return False, "New password and confirmation do not match."
+    return True, None
+
+
+@app.route('/change_my_password', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def change_my_password():
+    """Admin must enter current password before setting a new one."""
+    if request.method == 'POST':
+        current_pw = request.form.get('current_password', '')
+        new_pw = request.form.get('new_password', '')
+        confirm_pw = request.form.get('confirm_password', '')
+
+        conn = get_db_connection()
+        row = conn.execute(
+            'SELECT password_hash FROM users WHERE id = ?',
+            (current_user.id,),
+        ).fetchone()
+        conn.close()
+
+        if not row or not check_password_hash(row['password_hash'], current_pw):
+            flash('Current password is incorrect.', 'error')
+            return redirect(url_for('change_my_password'))
+
+        ok, err = _validate_new_password_pair(new_pw, confirm_pw)
+        if not ok:
+            flash(err, 'error')
+            return redirect(url_for('change_my_password'))
+
+        new_hash = generate_password_hash(new_pw)
+        conn = get_db_connection()
+        conn.execute(
+            'UPDATE users SET password_hash = ? WHERE id = ?',
+            (new_hash, current_user.id),
+        )
+        conn.commit()
+        conn.close()
+        audit_log('password_changed_self', entity_type='user', entity_id=current_user.id)
+        flash('Your password has been updated.', 'success')
+        return redirect(url_for('dashboard'))
+
+    return render_template('change_my_password.html')
+
+
+@app.route('/reset_user_password/<int:user_id>', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def reset_user_password(user_id):
+    """Admin sets a new password for another user (no current password required)."""
+    if user_id == current_user.id:
+        flash('To change your own password, use “Change my password”.', 'error')
+        return redirect(url_for('change_my_password'))
+
+    conn = get_db_connection()
+    target = conn.execute(
+        'SELECT id, username, role FROM users WHERE id = ?',
+        (user_id,),
+    ).fetchone()
+    conn.close()
+
+    if target is None:
+        abort(404)
+
+    if request.method == 'POST':
+        new_pw = request.form.get('new_password', '')
+        confirm_pw = request.form.get('confirm_password', '')
+
+        ok, err = _validate_new_password_pair(new_pw, confirm_pw)
+        if not ok:
+            flash(err, 'error')
+            return redirect(url_for('reset_user_password', user_id=user_id))
+
+        new_hash = generate_password_hash(new_pw)
+        conn = get_db_connection()
+        conn.execute(
+            'UPDATE users SET password_hash = ? WHERE id = ?',
+            (new_hash, user_id),
+        )
+        conn.commit()
+        conn.close()
+        audit_log(
+            'password_reset_by_admin',
+            entity_type='user',
+            entity_id=user_id,
+            details=f"target_username={target['username']}",
+        )
+        flash(f"Password updated for user “{target['username']}”.", 'success')
+        return redirect(url_for('manage_users'))
+
+    return render_template('reset_user_password.html', target=target)
+
+
 @app.route('/manage_users')
 @login_required
 @admin_required
 def manage_users():
     conn = get_db_connection()
-    users = conn.execute('SELECT username, role FROM users').fetchall()
+    users = conn.execute('SELECT id, username, role FROM users ORDER BY username').fetchall()
     conn.close()
     return render_template('manage_users.html', users=users)
 
@@ -815,6 +913,7 @@ def add_user():
     try:
         conn.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", (username, password_hash, role))
         conn.commit()
+        audit_log('user_created', entity_type='user', details=f"username={username}; role={role}")
     except sqlite3.IntegrityError:
         flash(f"Username '{username}' already exists.")
     finally:
