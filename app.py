@@ -1,6 +1,7 @@
 import sqlite3
 import json
 import os
+import re
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -12,7 +13,17 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from functools import wraps
 from dotenv import load_dotenv
+from catalog_categories import CATALOG_CATEGORIES
+
 load_dotenv()
+
+PHONE_PATTERN = re.compile(r'^0[17]\d{8}$')
+EMAIL_PATTERN = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+ACCEPTABLE_EMAIL_EXAMPLES = [
+    'name@example.com',
+    'name@company.co.ke',
+    'firstname.lastname@domain.org',
+]
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-only-change-me')
@@ -75,6 +86,26 @@ def get_db_connection():
     return conn
 
 
+def validate_phone(phone: str) -> str | None:
+    """Return an error message if phone is invalid, else None."""
+    phone = (phone or '').strip()
+    if not phone:
+        return None
+    if not PHONE_PATTERN.match(phone):
+        return 'Please input a valid phone number'
+    return None
+
+
+def validate_email(email: str) -> str | None:
+    """Return an error message if email is invalid, else None."""
+    email = (email or '').strip()
+    if not email:
+        return None
+    if not EMAIL_PATTERN.match(email):
+        return 'Please enter a valid email address (e.g. name@example.com, name@company.co.ke)'
+    return None
+
+
 def init_db():
     """
     Create all tables if missing (fresh deploy / empty SQLite file on Azure).
@@ -95,8 +126,9 @@ def init_db():
             name TEXT NOT NULL,
             description TEXT,
             sku TEXT UNIQUE,
-            price INTEGER NOT NULL,
-            quantity INTEGER NOT NULL,
+            price INTEGER NOT NULL DEFAULT 0,
+            buying_price REAL DEFAULT 0,
+            quantity INTEGER NOT NULL DEFAULT 0,
             category_id INTEGER,
             FOREIGN KEY (category_id) REFERENCES categories (id)
         );
@@ -156,14 +188,7 @@ def init_db():
         '''
     )
 
-    # Default categories (same as database_setup.py)
-    for name, code in [
-        ('Pipes', 'PP'),
-        ('Taps', 'TAP'),
-        ('Sinks', 'SNK'),
-        ('Toilet Bowls', 'TB'),
-        ('Accessories', 'ACC'),
-    ]:
+    for name, code in CATALOG_CATEGORIES:
         try:
             conn.execute('INSERT INTO categories (name, code) VALUES (?, ?)', (name, code))
         except sqlite3.IntegrityError:
@@ -243,9 +268,20 @@ def ensure_sales_has_cashier_username_column():
     conn.close()
 
 
+def ensure_products_has_buying_price_column():
+    conn = get_db_connection()
+    cols = conn.execute('PRAGMA table_info(products)').fetchall()
+    existing = {c['name'] for c in cols}
+    if 'buying_price' not in existing:
+        conn.execute('ALTER TABLE products ADD COLUMN buying_price REAL DEFAULT 0')
+        conn.commit()
+    conn.close()
+
+
 # Order matters: full schema first, then migrations for older DBs, then audit table.
 init_db()
 ensure_sales_has_cashier_username_column()
+ensure_products_has_buying_price_column()
 ensure_audit_logs_table()
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -289,7 +325,9 @@ def dashboard():
 @login_required
 def sales():
     conn = get_db_connection()
-    products_from_db = conn.execute('SELECT * FROM products WHERE quantity > 0 ORDER BY name').fetchall()
+    products_from_db = conn.execute(
+        'SELECT * FROM products WHERE quantity > 0 AND price > 0 ORDER BY name'
+    ).fetchall()
     customers_from_db = conn.execute('SELECT * FROM customers ORDER BY name').fetchall()
     conn.close()
     return render_template('sales.html', products=products_from_db, customers=customers_from_db)
@@ -339,18 +377,42 @@ def customers():
     else:
         customers_from_db = conn.execute('SELECT * FROM customers ORDER BY name').fetchall()
     conn.close()
-    return render_template('customers.html', customers=customers_from_db, search=search or '')
+    return render_template(
+        'customers.html',
+        customers=customers_from_db,
+        search=search or '',
+        email_examples=ACCEPTABLE_EMAIL_EXAMPLES,
+    )
 
 @app.route('/add_customer', methods=['POST'])
 @login_required
 def add_customer():
-    name = request.form['name']
-    phone = request.form['phone']
-    email = request.form['email']
+    name = request.form['name'].strip()
+    phone = request.form.get('phone', '').strip()
+    email = request.form.get('email', '').strip()
+
+    if not name:
+        flash('Customer name is required.', 'error')
+        return redirect(url_for('customers'))
+
+    phone_error = validate_phone(phone)
+    if phone_error:
+        flash(phone_error, 'error')
+        return redirect(url_for('customers'))
+
+    email_error = validate_email(email)
+    if email_error:
+        flash(email_error, 'error')
+        return redirect(url_for('customers'))
+
     conn = get_db_connection()
-    conn.execute('INSERT INTO customers (name, phone, email) VALUES (?, ?, ?)',(name, phone, email))
+    conn.execute(
+        'INSERT INTO customers (name, phone, email) VALUES (?, ?, ?)',
+        (name, phone or None, email or None),
+    )
     conn.commit()
     conn.close()
+    flash('Customer added successfully.', 'success')
     return redirect(url_for('customers'))
 
 
@@ -442,7 +504,8 @@ def products():
 def add_product():
     name = request.form['name']
     description = request.form['description']
-    price = request.form['price']
+    price = request.form.get('price') or 0
+    buying_price = request.form.get('buying_price') or 0
     quantity = request.form['quantity']
     category_id = request.form['category_id']
     conn = get_db_connection()
@@ -450,7 +513,10 @@ def add_product():
     category_code = category['code']
     name_part = name[:3].upper()
     cursor = conn.cursor()
-    cursor.execute('INSERT INTO products (name, description, price, quantity, category_id) VALUES (?, ?, ?, ?, ?)',(name, description, price, quantity, category_id))
+    cursor.execute(
+        'INSERT INTO products (name, description, price, buying_price, quantity, category_id) VALUES (?, ?, ?, ?, ?, ?)',
+        (name, description, price, buying_price, quantity, category_id),
+    )
     new_product_id = cursor.lastrowid
     generated_sku = f"{category_code}-{name_part}-{new_product_id}"
     conn.execute('UPDATE products SET sku = ? WHERE id = ?', (generated_sku, new_product_id))
@@ -939,12 +1005,13 @@ def edit_product(product_id):
     if request.method == 'POST':
         name = request.form['name']
         description = request.form['description']
-        price = request.form['price']
+        price = request.form.get('price') or 0
+        buying_price = request.form.get('buying_price') or 0
         sku = request.form['sku']
 
         conn.execute(
-            'UPDATE products SET name = ?, description = ?, price = ?, sku = ? WHERE id = ?',
-            (name, description, price, sku, product_id),
+            'UPDATE products SET name = ?, description = ?, price = ?, buying_price = ?, sku = ? WHERE id = ?',
+            (name, description, price, buying_price, sku, product_id),
         )
         conn.commit()
         conn.close()
@@ -952,7 +1019,7 @@ def edit_product(product_id):
             "product_edited",
             entity_type="product",
             entity_id=product_id,
-            details=f"name={name}; price={price}; sku={sku}",
+            details=f"name={name}; price={price}; buying_price={buying_price}; sku={sku}",
         )
         flash("Product details updated.", "success")
         return redirect(url_for('products'))

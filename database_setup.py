@@ -21,8 +21,9 @@ CREATE TABLE IF NOT EXISTS products (
     name TEXT NOT NULL,
     description TEXT,
     sku TEXT UNIQUE,
-    price INTEGER NOT NULL,
-    quantity INTEGER NOT NULL,
+    price INTEGER NOT NULL DEFAULT 0,
+    buying_price REAL DEFAULT 0,
+    quantity INTEGER NOT NULL DEFAULT 0,
     category_id INTEGER,
     FOREIGN KEY (category_id) REFERENCES categories (id)
 )
@@ -115,7 +116,7 @@ except sqlite3.IntegrityError:
 # Add a default "Cash Sale" customer for sales that are not on credit
 try:
     cursor.execute("INSERT INTO customers (name, phone) VALUES ('Cash Sale / Walk-in', 'N/A')")
-except sqlite.IntegrityError:
+except sqlite3.IntegrityError:
     pass # Default customer already exists
 
 conn.commit()

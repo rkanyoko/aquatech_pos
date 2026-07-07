@@ -30,6 +30,7 @@
             border-radius: 4px;
             cursor: pointer;
         }
+        .field-hint { font-size: 0.9em; color: #555; margin-top: -4px; margin-bottom: 8px; }
     </style>
 
     <h1>Edit Product: {{ product.name }}</h1>
@@ -39,13 +40,18 @@
         <input type="text" id="name" name="name" value="{{ product.name }}" required>
 
         <label for="description">Description:</label>
-        <input type="text" id="description" name="description" value="{{ product.description }}">
+        <input type="text" id="description" name="description" value="{{ product.description or '' }}">
 
         <label for="sku">SKU:</label>
         <input type="text" id="sku" name="sku" value="{{ product.sku }}" required>
 
-        <label for="price">Price (Ksh.):</label>
-        <input type="number" id="price" name="price" step="1" value="{{ product.price }}" required>
+        <label for="buying_price">Buying Price (Ksh.) — admin only:</label>
+        <input type="number" id="buying_price" name="buying_price" step="0.01" min="0"
+               value="{{ product.buying_price or 0 }}">
+
+        <label for="price">Selling Price (Ksh.):</label>
+        <input type="number" id="price" name="price" step="1" min="0" value="{{ product.price or 0 }}">
+        <p class="field-hint">Items need a selling price and stock before they appear on the sales screen.</p>
 
         <input type="submit" value="Save Changes">
     </form>

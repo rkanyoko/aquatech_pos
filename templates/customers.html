@@ -9,23 +9,39 @@
         tr:nth-child(even) { background-color: #f2f2f2; }
         h1, h2 { color: #333; }
         form { background-color: #f9f9f9; padding: 20px; border-radius: 5px; border: 1px solid #ddd; margin-bottom: 2em;}
-        input[type=text], input[type=email] { width: 100%; padding: 8px; margin: 6px 0; display: inline-block; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        input[type=text], input[type=email], input[type=tel] { width: 100%; padding: 8px; margin: 6px 0; display: inline-block; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
         input[type=submit] { background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
         .report-link { background-color: #17a2b8; color: white; padding: 5px 10px; border-radius: 4px; text-decoration: none; display: inline-block; margin-right: 5px; }
         .delete-btn { background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+        .field-hint { font-size: 0.9em; color: #555; margin-top: -4px; margin-bottom: 8px; }
+        .field-error { color: #dc3545; font-size: 0.85em; display: none; margin-top: -4px; margin-bottom: 8px; }
     </style>
 
     <h1>Customer Management</h1>
 
     <h2>Add New Customer</h2>
-    <form action="/add_customer" method="post">
-        <!-- ... form content is unchanged ... -->
+    <form action="/add_customer" method="post" id="customer-form">
         <label for="name">Customer Name:</label>
         <input type="text" id="name" name="name" required>
+
         <label for="phone">Phone Number:</label>
-        <input type="text" id="phone" name="phone">
+        <input type="tel" id="phone" name="phone" maxlength="10" inputmode="numeric"
+               pattern="0[17][0-9]{8}" title="Please input a valid phone number">
+        <div class="field-hint">Format: 07xxxxxxxx or 01xxxxxxxx (10 digits, optional)</div>
+        <div class="field-error" id="phone-error">Please input a valid phone number</div>
+
         <label for="email">Email:</label>
-        <input type="email" id="email" name="email">
+        <input type="email" id="email" name="email"
+               pattern="[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+               title="Please enter a valid email address">
+        <div class="field-hint">
+            Acceptable formats:
+            {% for example in email_examples %}
+                <code>{{ example }}</code>{% if not loop.last %}, {% endif %}
+            {% endfor %}
+        </div>
+        <div class="field-error" id="email-error">Please enter a valid email address</div>
+
         <input type="submit" value="Add Customer">
     </form>
 
@@ -53,10 +69,8 @@
                 <td>{{ customer.email }}</td>
                 <td>
                     <a href="{{ url_for('customer_report', customer_id=customer.id) }}" class="report-link">View History</a>
-                    
-                    <!-- ADMIN-ONLY DELETE BUTTON -->
+
                     {% if current_user.role == 'Admin' %}
-                        <!-- We cannot delete the default 'Cash Sale' customer (id=1) -->
                         {% if customer.id > 1 %}
                         <form action="{{ url_for('delete_customer', customer_id=customer.id) }}" method="post" style="display: inline;" onsubmit="return confirm('WARNING: Deleting this customer will also delete all their sales and payment history. This cannot be undone. Are you sure?');">
                             <button type="submit" class="delete-btn">Delete</button>
@@ -68,11 +82,35 @@
             {% endfor %}
         </tbody>
     </table>
-{% endblock %}```
 
+    <script>
+        const phoneInput = document.getElementById('phone');
+        const emailInput = document.getElementById('email');
+        const phoneError = document.getElementById('phone-error');
+        const emailError = document.getElementById('email-error');
+        const phonePattern = /^0[17]\d{8}$/;
+        const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
+        phoneInput.addEventListener('input', () => {
+            phoneInput.value = phoneInput.value.replace(/\D/g, '').slice(0, 10);
+        });
 
+        document.getElementById('customer-form').addEventListener('submit', (event) => {
+            let valid = true;
+            phoneError.style.display = 'none';
+            emailError.style.display = 'none';
 
-
-
-
+            if (phoneInput.value && !phonePattern.test(phoneInput.value)) {
+                phoneError.style.display = 'block';
+                valid = false;
+            }
+            if (emailInput.value && !emailPattern.test(emailInput.value)) {
+                emailError.style.display = 'block';
+                valid = false;
+            }
+            if (!valid) {
+                event.preventDefault();
+            }
+        });
+    </script>
+{% endblock %}
