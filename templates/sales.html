@@ -4,8 +4,8 @@
 
 {% block content %}
     <style>
-        .container { display: flex; width: 100%; }
-        .product-list { width: 60%; padding-right: 20px; box-sizing: border-box; }
+        .container { display: flex; width: 100%; gap: 12px; }
+        .product-list { width: 60%; box-sizing: border-box; }
         .sale-cart { width: 40%; background-color: #f9f9f9; padding: 20px; border-radius: 5px; border: 1px solid #ddd; }
         table { width: 100%; border-collapse: collapse; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
@@ -18,34 +18,55 @@
         .payment-options label { margin-right: 15px; }
         .qty-input { width: 60px; text-align: center; }
         .edit-btn { background: none; border: none; cursor: pointer; color: #007bff; font-size: 0.8em; padding: 0 5px; }
+        .search-box {
+            width: 100%;
+            padding: 10px;
+            margin: 0 0 12px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .search-meta { color: #666; font-size: 0.9em; margin-bottom: 8px; }
+        .product-row.hidden { display: none; }
+        @media (max-width: 900px) {
+            .container { flex-direction: column; }
+            .product-list, .sale-cart { width: 100%; }
+        }
     </style>
 
     <div class="container">
         <div class="product-list">
             <h2>Available Products</h2>
+            <input type="search" id="product-search" class="search-box"
+                   placeholder="Search by name or SKU..." autocomplete="off">
+            <div class="search-meta" id="search-meta"></div>
             <table>
                 <thead>
                     <tr>
                         <th>Name</th>
+                        <th>SKU</th>
                         <th>Price (Ksh.)</th>
                         <th>In Stock</th>
                         <th>Quantity</th>
                         <th>Action</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="product-tbody">
                     {% for product in products %}
-                    <tr>
+                    <tr class="product-row"
+                        data-name="{{ product.name|lower }}"
+                        data-sku="{{ (product.sku or '')|lower }}">
                         <td>{{ product.name }}</td>
+                        <td>{{ product.sku or '-' }}</td>
                         <td>{{ product.price }}</td>
                         <td>{{ product.quantity }}</td>
                         <td>
                             <input type="number" class="qty-input" value="1" min="1" id="qty-{{ product.id }}">
                         </td>
                         <td>
-                            <button class="add-btn" 
-                                    data-id="{{ product.id }}" 
-                                    data-name="{{ product.name }}" 
+                            <button class="add-btn"
+                                    data-id="{{ product.id }}"
+                                    data-name="{{ product.name }}"
                                     data-price="{{ product.price }}"
                                     data-stock="{{ product.quantity }}">
                                 Add to Cart
@@ -55,6 +76,9 @@
                     {% endfor %}
                 </tbody>
             </table>
+            {% if not products %}
+            <p>No sellable products yet (need selling price &gt; 0 and stock &gt; 0).</p>
+            {% endif %}
         </div>
 
         <div class="sale-cart">
@@ -88,10 +112,32 @@
     const totalAmountInput = document.getElementById('total_amount_input');
     const cartDataInput = document.getElementById('cart_data_input');
     const saleForm = document.getElementById('sale-form');
+    const searchInput = document.getElementById('product-search');
+    const searchMeta = document.getElementById('search-meta');
+    const productRows = document.querySelectorAll('.product-row');
 
     const CART_KEY = `aquatech_cart_${"{{ current_user.username }}"}`
     const CART_META_KEY = `aquatech_cart_meta_${"{{ current_user.username }}"}`
     let cart = {};
+
+    function filterProducts() {
+        const q = (searchInput.value || '').trim().toLowerCase();
+        let visible = 0;
+        productRows.forEach(row => {
+            const name = row.dataset.name || '';
+            const sku = row.dataset.sku || '';
+            const match = !q || name.includes(q) || sku.includes(q);
+            row.classList.toggle('hidden', !match);
+            if (match) visible += 1;
+        });
+        if (q) {
+            searchMeta.textContent = `Showing ${visible} of ${productRows.length} products`;
+        } else {
+            searchMeta.textContent = `${productRows.length} products available`;
+        }
+    }
+    searchInput.addEventListener('input', filterProducts);
+    filterProducts();
 
     function saveCartToStorage() {
         try {
@@ -128,7 +174,6 @@
         } catch (e) {}
     }
 
-    // Restore cart on page load (helps when session expires / user re-logs in)
     loadCartFromStorage();
     addButtons.forEach(button => {
         button.addEventListener('click', () => {
@@ -198,6 +243,11 @@
     saleForm.addEventListener('submit', function(event) {
         const customerId = document.getElementById('customer').value;
         const paymentStatus = document.querySelector('input[name="payment_status"]:checked').value;
+        if (Object.keys(cart).length === 0) {
+            event.preventDefault();
+            alert('Add at least one product to the cart.');
+            return;
+        }
         if (customerId === '1' && paymentStatus === 'On Credit') {
             event.preventDefault();
             if (confirm("A walk-in customer cannot buy on credit. Register them as a new customer?")) {
@@ -206,11 +256,9 @@
         }
     });
 
-    // Keep meta up to date even if cart unchanged
     document.getElementById('customer').addEventListener('change', saveCartToStorage);
     document.querySelectorAll('input[name="payment_status"]').forEach(r => r.addEventListener('change', saveCartToStorage));
 
-    // Clear saved cart only when we actually submit a valid sale
     saleForm.addEventListener('submit', function(event) {
         if (event.defaultPrevented) return;
         try {
@@ -219,7 +267,6 @@
         } catch (e) {}
     });
 
-    // First render after restore
     updateCart();
 </script>
 {% endblock %}

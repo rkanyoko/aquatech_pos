@@ -12,4 +12,4 @@ env/
 .idea/
 .vscode/
 downloads/
-.env
+backups/

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Customer{% endblock %}
+
+{% block content %}
+    <style>
+        form {
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            max-width: 560px;
+        }
+        input[type=text], input[type=email], input[type=tel] {
+            width: 100%;
+            padding: 8px;
+            margin: 6px 0;
+            display: inline-block;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        input[type=submit] {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .field-hint { font-size: 0.9em; color: #555; margin-top: -4px; margin-bottom: 8px; }
+        .field-error { color: #dc3545; font-size: 0.85em; display: none; margin-top: -4px; margin-bottom: 8px; }
+        .back-link { display: inline-block; margin-bottom: 1rem; }
+    </style>
+
+    <a class="back-link" href="{{ url_for('customers') }}">← Back to customers</a>
+    <h1>Edit Customer</h1>
+
+    <form action="{{ url_for('edit_customer', customer_id=customer.id) }}" method="post" id="edit-customer-form">
+        <label for="name">Customer Name:</label>
+        <input type="text" id="name" name="name" value="{{ customer.name }}"
+               {% if customer.id == 1 %}readonly{% else %}required{% endif %}>
+        {% if customer.id == 1 %}
+        <div class="field-hint">Walk-in customer name is fixed.</div>
+        {% endif %}
+
+        <label for="phone">Phone Number:</label>
+        <input type="tel" id="phone" name="phone" maxlength="10" inputmode="numeric"
+               value="{{ customer.phone or '' }}"
+               {% if customer.id != 1 %}pattern="0[17][0-9]{8}"{% endif %}
+               title="Please input a valid phone number">
+        <div class="field-hint">Format: 07xxxxxxxx or 01xxxxxxxx (10 digits, optional)</div>
+        <div class="field-error" id="phone-error">Please input a valid phone number</div>
+
+        <label for="email">Email:</label>
+        <input type="email" id="email" name="email" value="{{ customer.email or '' }}"
+               pattern="[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+               title="Please enter a valid email address">
+        <div class="field-hint">
+            Acceptable formats:
+            {% for example in email_examples %}
+                <code>{{ example }}</code>{% if not loop.last %}, {% endif %}
+            {% endfor %}
+        </div>
+        <div class="field-error" id="email-error">Please enter a valid email address</div>
+
+        <input type="submit" value="Save Changes">
+    </form>
+
+    <script>
+        const phoneInput = document.getElementById('phone');
+        const emailInput = document.getElementById('email');
+        const phoneError = document.getElementById('phone-error');
+        const emailError = document.getElementById('email-error');
+        const phonePattern = /^0[17]\d{8}$/;
+        const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+        const isWalkIn = {{ 'true' if customer.id == 1 else 'false' }};
+
+        phoneInput.addEventListener('input', () => {
+            if (isWalkIn && phoneInput.value.toUpperCase() === 'N/A') return;
+            phoneInput.value = phoneInput.value.replace(/\D/g, '').slice(0, 10);
+        });
+
+        document.getElementById('edit-customer-form').addEventListener('submit', (event) => {
+            let valid = true;
+            phoneError.style.display = 'none';
+            emailError.style.display = 'none';
+
+            const phoneVal = phoneInput.value.trim();
+            const skipPhone = isWalkIn && (phoneVal === '' || phoneVal.toUpperCase() === 'N/A');
+            if (!skipPhone && phoneVal && !phonePattern.test(phoneVal)) {
+                phoneError.style.display = 'block';
+                valid = false;
+            }
+            if (emailInput.value && !emailPattern.test(emailInput.value)) {
+                emailError.style.display = 'block';
+                valid = false;
+            }
+            if (!valid) event.preventDefault();
+        });
+    </script>
+{% endblock %}

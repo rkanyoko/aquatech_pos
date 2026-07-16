@@ -5,7 +5,7 @@
 {% block content %}
     <style>
         .receipt-wrapper {
-            max-width: 420px;
+            max-width: 440px;
             margin: 0 auto;
         }
         .receipt-card {
@@ -14,24 +14,32 @@
             border-radius: 8px;
             box-shadow: 0 2px 6px rgba(15, 52, 96, 0.12);
             font-size: 0.9rem;
+            color: #111;
         }
         .receipt-header {
             text-align: center;
             margin-bottom: 1rem;
+            border-bottom: 1px dashed #ccc;
+            padding-bottom: 0.75rem;
         }
         .receipt-header h1 {
             margin: 0;
-            font-size: 1.4rem;
+            font-size: 1.35rem;
+            letter-spacing: 0.02em;
         }
         .receipt-header p {
-            margin: 2px 0;
+            margin: 3px 0;
+            color: #333;
         }
         .receipt-meta {
             margin-bottom: 0.8rem;
+            font-size: 0.85rem;
         }
         .receipt-meta div {
             display: flex;
             justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 4px;
         }
         .items-table {
             width: 100%;
@@ -40,52 +48,90 @@
         }
         .items-table th,
         .items-table td {
-            border: 1px solid #e1e7f0;
-            padding: 4px 6px;
-            font-size: 0.85rem;
+            border-bottom: 1px solid #e1e7f0;
+            padding: 5px 4px;
+            font-size: 0.82rem;
+            vertical-align: top;
         }
         .items-table th {
             background-color: #f1f7fb;
+            text-align: left;
         }
+        .items-table .num { text-align: right; white-space: nowrap; }
+        .sku { color: #666; font-size: 0.75rem; }
         .totals {
             margin-top: 0.5rem;
+            border-top: 1px dashed #ccc;
+            padding-top: 0.5rem;
         }
         .totals div {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 2px;
+            margin-bottom: 3px;
         }
         .totals div.total-line {
             font-weight: bold;
+            font-size: 1.05rem;
+            margin-top: 4px;
         }
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .status-paid { background: #d4edda; color: #155724; }
+        .status-credit { background: #f8d7da; color: #721c24; }
         .thankyou {
             margin-top: 1rem;
             text-align: center;
-            font-style: italic;
+            font-size: 0.85rem;
+            border-top: 1px dashed #ccc;
+            padding-top: 0.75rem;
         }
         .print-actions {
             text-align: center;
             margin-top: 1rem;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            padding: 0.5rem 1.1rem;
+            cursor: pointer;
+            text-decoration: none;
+            font-weight: 500;
         }
 
         @media print {
             .navbar,
-            .print-actions {
+            .print-actions,
+            .flash,
+            .content > div:has(.btn-primary) {
                 display: none !important;
             }
             body {
-                background: #ffffff;
+                background: #ffffff !important;
             }
             .content {
-                padding: 0;
-                margin: 0;
+                padding: 0 !important;
+                margin: 0 !important;
+                max-width: none !important;
             }
             .receipt-wrapper {
                 margin: 0;
+                max-width: none;
             }
             .receipt-card {
                 box-shadow: none;
                 border-radius: 0;
+                padding: 0;
             }
         }
     </style>
@@ -93,10 +139,11 @@
     <div class="receipt-wrapper">
         <div class="receipt-card">
             <div class="receipt-header">
-                <h1>Aqua Tech POS</h1>
-                <p>Quality plumbing & water solutions</p>
-                <p>Tel: 0723171419 | Email: aquatechplumbing@gmail.com</p>
-                <p>Location:Kajiado town, 50 meters from Bata store kajiado.</p>
+                <h1>AQUA TECH LIMITED</h1>
+                <p>Quality plumbing &amp; water solutions</p>
+                <p>Tel: 0723 171 419</p>
+                <p>Email: aquatechplumbing@gmail.com</p>
+                <p>Kajiado town, 50m from Bata store</p>
             </div>
 
             <div class="receipt-meta">
@@ -109,7 +156,14 @@
                     <span><strong>Phone</strong> {{ sale.customer_phone or '-' }}</span>
                 </div>
                 <div>
-                    <span><strong>Status</strong> {{ sale.payment_status }}</span>
+                    <span>
+                        <strong>Status</strong>
+                        {% if sale.payment_status == 'Paid' %}
+                            <span class="status-badge status-paid">Paid</span>
+                        {% else %}
+                            <span class="status-badge status-credit">On Credit</span>
+                        {% endif %}
+                    </span>
                     <span><strong>Served by</strong> {{ sale.cashier_username or '-' }}</span>
                 </div>
             </div>
@@ -118,21 +172,24 @@
                 <thead>
                     <tr>
                         <th>Item</th>
-                        <th>Qty</th>
-                        <th>Price</th>
-                        <th>Subtot.</th>
+                        <th class="num">Qty</th>
+                        <th class="num">Price</th>
+                        <th class="num">Subtot.</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% set running_total = 0 %}
+                    {% set ns = namespace(total=0) %}
                     {% for item in items %}
                         {% set line_total = item.quantity_sold * item.price_per_unit %}
-                        {% set running_total = running_total + line_total %}
+                        {% set ns.total = ns.total + line_total %}
                         <tr>
-                            <td>{{ item.name }}</td>
-                            <td>{{ item.quantity_sold }}</td>
-                            <td>{{ "%.2f"|format(item.price_per_unit) }}</td>
-                            <td>{{ "%.2f"|format(line_total) }}</td>
+                            <td>
+                                {{ item.name }}
+                                {% if item.sku %}<div class="sku">{{ item.sku }}</div>{% endif %}
+                            </td>
+                            <td class="num">{{ item.quantity_sold }}</td>
+                            <td class="num">{{ "%.2f"|format(item.price_per_unit) }}</td>
+                            <td class="num">{{ "%.2f"|format(line_total) }}</td>
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -140,26 +197,27 @@
 
             <div class="totals">
                 <div>
-                    <span>Subtotal</span>
-                    <span>Ksh. {{ "%.2f"|format(running_total) }}</span>
+                    <span>Items total</span>
+                    <span>Ksh. {{ "%.2f"|format(ns.total) }}</span>
                 </div>
                 <div class="total-line">
-                    <span>Total</span>
+                    <span>TOTAL</span>
                     <span>Ksh. {{ "%.2f"|format(sale.total_amount) }}</span>
                 </div>
             </div>
 
             <div class="thankyou">
-                <p><b>Please confirm your order before leaving the shop</b></p>
+                <p><strong>Please confirm your order before leaving the shop.</strong></p>
                 <p>Thank you for shopping at Aqua Tech.</p>
-                <p>we value every customer and evey purchase.</p>
+                <p>We value every customer and every purchase.</p>
                 <p>For any issues, kindly retain this receipt.</p>
             </div>
         </div>
 
         <div class="print-actions">
             <button class="btn-primary" onclick="window.print()">Print Receipt</button>
+            <a class="btn-secondary" href="{{ url_for('sales') }}">New Sale</a>
+            <a class="btn-secondary" href="{{ url_for('dashboard') }}">Dashboard</a>
         </div>
     </div>
 {% endblock %}
-

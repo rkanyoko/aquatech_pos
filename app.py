@@ -3,12 +3,14 @@ import json
 import os
 import re
 import time
+import shutil
+from pathlib import Path
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import csv
 from io import StringIO
 from datetime import timedelta
-from flask import Flask, render_template, request, redirect, url_for, flash, abort, Response, session
+from flask import Flask, render_template, request, redirect, url_for, flash, abort, Response, session, send_file
 from werkzeug.security import check_password_hash, generate_password_hash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from functools import wraps
@@ -19,6 +21,7 @@ load_dotenv()
 
 LOW_STOCK_THRESHOLD = 10
 LOW_STOCK_PREVIEW_LIMIT = 10
+BACKUP_KEEP_COUNT = 14
 
 PHONE_PATTERN = re.compile(r'^0[17]\d{8}$')
 EMAIL_PATTERN = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
@@ -55,6 +58,20 @@ login_manager.session_protection = "strong"
 def make_session_permanent():
     session.permanent = True
 
+
+@app.before_request
+def run_daily_auto_backup():
+    # Skip static-ish / unauthenticated noise; one dated copy per day is enough.
+    if request.endpoint in (None, 'login', 'static'):
+        return
+    if not getattr(current_user, 'is_authenticated', False):
+        return
+    try:
+        maybe_auto_backup()
+    except Exception:
+        # Never block the app if backup fails (disk full, permissions, etc.)
+        pass
+
 class User(UserMixin):
     def __init__(self, id, username, role):
         self.id = id
@@ -82,11 +99,63 @@ def admin_required(f):
 def forbidden(e):
     return render_template('unauthorized.html'), 403
 
+def get_db_path() -> str:
+    return os.environ.get('DB_PATH', 'pos_system.db')
+
+
 def get_db_connection():
-    db_path = os.environ.get('DB_PATH', 'pos_system.db')
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(get_db_path())
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def get_backup_dir() -> Path:
+    return Path(get_db_path()).resolve().parent / 'backups'
+
+
+def maybe_auto_backup(force: bool = False) -> Path | None:
+    """
+    Automatically copy the SQLite DB once per calendar day (EAT).
+    Keeps the newest BACKUP_KEEP_COUNT dated files. Safe to call often.
+    """
+    db_path = Path(get_db_path())
+    if not db_path.is_file():
+        return None
+
+    backup_dir = get_backup_dir()
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    today = _now_eat()[:10]  # YYYY-MM-DD
+    marker = backup_dir / '.last_backup_date'
+    target = backup_dir / f'pos-backup-{today}.db'
+
+    if not force and marker.exists() and marker.read_text(encoding='utf-8').strip() == today and target.exists():
+        return None
+
+    shutil.copy2(db_path, target)
+    marker.write_text(today, encoding='utf-8')
+
+    backups = sorted(backup_dir.glob('pos-backup-*.db'), key=lambda p: p.name, reverse=True)
+    for old in backups[BACKUP_KEEP_COUNT:]:
+        try:
+            old.unlink()
+        except OSError:
+            pass
+    return target
+
+
+def list_db_backups() -> list[dict]:
+    backup_dir = get_backup_dir()
+    if not backup_dir.is_dir():
+        return []
+    items = []
+    for path in sorted(backup_dir.glob('pos-backup-*.db'), key=lambda p: p.name, reverse=True):
+        stat = path.stat()
+        items.append({
+            'filename': path.name,
+            'size_kb': round(stat.st_size / 1024, 1),
+            'modified': datetime.fromtimestamp(stat.st_mtime, ZoneInfo('Africa/Nairobi')).strftime('%Y-%m-%d %H:%M:%S'),
+        })
+    return items
 
 
 def validate_phone(phone: str) -> str | None:
@@ -682,43 +751,137 @@ def sales():
 @app.route('/process_sale', methods=['POST'])
 @login_required
 def process_sale():
-    total_amount = request.form['total_amount']
-    cart_data = json.loads(request.form['cart_data'])
-    customer_id = request.form['customer_id']
-    payment_status = request.form['payment_status']
+    try:
+        cart_data = json.loads(request.form.get('cart_data') or '{}')
+    except json.JSONDecodeError:
+        flash('Invalid cart data. Please try the sale again.', 'error')
+        return redirect(url_for('sales'))
+
+    customer_id = request.form.get('customer_id')
+    payment_status = request.form.get('payment_status')
+
+    if not cart_data:
+        flash('Cart is empty. Add at least one product before completing a sale.', 'error')
+        return redirect(url_for('sales'))
+
+    if payment_status not in ('Paid', 'On Credit'):
+        flash('Invalid payment status.', 'error')
+        return redirect(url_for('sales'))
+
+    try:
+        customer_id_int = int(customer_id)
+    except (TypeError, ValueError):
+        flash('Please select a valid customer.', 'error')
+        return redirect(url_for('sales'))
+
+    if customer_id_int == 1 and payment_status == 'On Credit':
+        flash('A walk-in customer cannot buy on credit. Register them first.', 'error')
+        return redirect(url_for('sales'))
+
     conn = get_db_connection()
     cursor = conn.cursor()
-    timestamp = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
-    cursor.execute(
-        'INSERT INTO sales (total_amount, customer_id, payment_status, timestamp, cashier_username) VALUES (?, ?, ?, ?, ?)',
-        (total_amount, customer_id, payment_status, timestamp, current_user.username),
-    )
-    sale_id = cursor.lastrowid
-    for product_id, item_details in cart_data.items():
-        quantity_sold = item_details['quantity']
-        price_per_unit = item_details['price']
-        previous = cursor.execute(
-            'SELECT quantity FROM products WHERE id = ?', (product_id,)
-        ).fetchone()
-        previous_qty = previous['quantity'] if previous else None
+
+    customer = cursor.execute('SELECT id FROM customers WHERE id = ?', (customer_id_int,)).fetchone()
+    if customer is None:
+        conn.close()
+        flash('Selected customer was not found.', 'error')
+        return redirect(url_for('sales'))
+
+    is_admin = current_user.role == 'Admin'
+    validated_lines = []
+    computed_total = 0.0
+
+    try:
+        for product_id_raw, item_details in cart_data.items():
+            try:
+                product_id = int(product_id_raw)
+                quantity_sold = int(item_details.get('quantity', 0))
+            except (TypeError, ValueError):
+                raise ValueError('Cart contains an invalid product or quantity.')
+
+            if quantity_sold <= 0:
+                raise ValueError('Each cart item must have a quantity greater than zero.')
+
+            product = cursor.execute(
+                'SELECT id, name, price, quantity FROM products WHERE id = ?',
+                (product_id,),
+            ).fetchone()
+            if product is None:
+                raise ValueError('One of the products in the cart no longer exists.')
+
+            if quantity_sold > product['quantity']:
+                raise ValueError(
+                    f"Not enough stock for “{product['name']}”. "
+                    f"Available: {product['quantity']}, requested: {quantity_sold}."
+                )
+
+            # Workers always pay catalogue price; admins may override line price.
+            if is_admin:
+                try:
+                    price_per_unit = float(item_details.get('price', product['price']))
+                except (TypeError, ValueError):
+                    raise ValueError(f"Invalid price for “{product['name']}”.")
+                if price_per_unit < 0:
+                    raise ValueError(f"Price cannot be negative for “{product['name']}”.")
+            else:
+                price_per_unit = float(product['price'])
+
+            if product['price'] <= 0 and not is_admin:
+                raise ValueError(f"“{product['name']}” has no selling price set yet.")
+
+            validated_lines.append({
+                'product_id': product_id,
+                'quantity_sold': quantity_sold,
+                'price_per_unit': price_per_unit,
+                'previous_qty': product['quantity'],
+            })
+            computed_total += price_per_unit * quantity_sold
+
+        timestamp = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
         cursor.execute(
-            'INSERT INTO sale_items (sale_id, product_id, quantity_sold, price_per_unit) VALUES (?, ?, ?, ?)',
-            (sale_id, product_id, quantity_sold, price_per_unit),
+            'INSERT INTO sales (total_amount, customer_id, payment_status, timestamp, cashier_username) VALUES (?, ?, ?, ?, ?)',
+            (computed_total, customer_id_int, payment_status, timestamp, current_user.username),
         )
-        cursor.execute(
-            'UPDATE products SET quantity = quantity - ? WHERE id = ?',
-            (quantity_sold, product_id),
-        )
-        sync_product_low_stock_marker(conn, int(product_id), previous_quantity=previous_qty)
-    conn.commit()
+        sale_id = cursor.lastrowid
+
+        for line in validated_lines:
+            cursor.execute(
+                'INSERT INTO sale_items (sale_id, product_id, quantity_sold, price_per_unit) VALUES (?, ?, ?, ?)',
+                (sale_id, line['product_id'], line['quantity_sold'], line['price_per_unit']),
+            )
+            cursor.execute(
+                'UPDATE products SET quantity = quantity - ? WHERE id = ?',
+                (line['quantity_sold'], line['product_id']),
+            )
+            sync_product_low_stock_marker(
+                conn,
+                line['product_id'],
+                previous_quantity=line['previous_qty'],
+            )
+
+        conn.commit()
+    except ValueError as exc:
+        conn.rollback()
+        conn.close()
+        flash(str(exc), 'error')
+        return redirect(url_for('sales'))
+    except Exception:
+        conn.rollback()
+        conn.close()
+        flash('Could not complete the sale. Please try again.', 'error')
+        return redirect(url_for('sales'))
+
     conn.close()
     audit_log(
         "sale_created",
         entity_type="sale",
         entity_id=sale_id,
-        details=f"customer_id={customer_id}; status={payment_status}; total={total_amount}",
+        details=f"customer_id={customer_id_int}; status={payment_status}; total={computed_total}",
     )
-    # After processing a sale, go to printable receipt view
+    try:
+        maybe_auto_backup(force=False)
+    except Exception:
+        pass
     return redirect(url_for('sale_receipt', sale_id=sale_id))
 
 @app.route('/customers')
@@ -772,6 +935,66 @@ def add_customer():
     conn.close()
     flash('Customer added successfully.', 'success')
     return redirect(url_for('customers'))
+
+
+@app.route('/edit_customer/<int:customer_id>', methods=['GET', 'POST'])
+@login_required
+def edit_customer(customer_id):
+    conn = get_db_connection()
+    customer = conn.execute('SELECT * FROM customers WHERE id = ?', (customer_id,)).fetchone()
+    if customer is None:
+        conn.close()
+        abort(404)
+
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        phone = request.form.get('phone', '').strip()
+        email = request.form.get('email', '').strip()
+
+        # Keep the default walk-in name stable for credit checks / templates.
+        if customer_id == 1:
+            name = customer['name']
+
+        if not name:
+            conn.close()
+            flash('Customer name is required.', 'error')
+            return redirect(url_for('edit_customer', customer_id=customer_id))
+
+        phone_error = None
+        if not (customer_id == 1 and phone.upper() in ('N/A', '')):
+            phone_error = validate_phone(phone)
+        if phone_error:
+            conn.close()
+            flash(phone_error, 'error')
+            return redirect(url_for('edit_customer', customer_id=customer_id))
+
+        email_error = validate_email(email)
+        if email_error:
+            conn.close()
+            flash(email_error, 'error')
+            return redirect(url_for('edit_customer', customer_id=customer_id))
+
+        # Walk-in may keep phone as N/A
+        if customer_id == 1 and phone.upper() == 'N/A':
+            phone_value = 'N/A'
+        else:
+            phone_value = phone or None
+
+        conn.execute(
+            'UPDATE customers SET name = ?, phone = ?, email = ? WHERE id = ?',
+            (name, phone_value, email or None, customer_id),
+        )
+        conn.commit()
+        conn.close()
+        flash('Customer updated successfully.', 'success')
+        return redirect(url_for('customers'))
+
+    conn.close()
+    return render_template(
+        'edit_customer.html',
+        customer=customer,
+        email_examples=ACCEPTABLE_EMAIL_EXAMPLES,
+    )
 
 
 #the following function is to help in the creation of reports of each customer that is needed. This is generated for the purpose of letting the clients/customers get some sort of report of their results as a whole
@@ -1315,6 +1538,46 @@ def reset_user_password(user_id):
         return redirect(url_for('manage_users'))
 
     return render_template('reset_user_password.html', target=target)
+
+
+@app.route('/backups')
+@login_required
+@admin_required
+def backups():
+    maybe_auto_backup()
+    return render_template(
+        'backups.html',
+        backups=list_db_backups(),
+        keep_count=BACKUP_KEEP_COUNT,
+    )
+
+
+@app.route('/backups/run', methods=['POST'])
+@login_required
+@admin_required
+def run_backup_now():
+    try:
+        path = maybe_auto_backup(force=True)
+        if path:
+            flash(f'Backup created: {path.name}', 'success')
+        else:
+            flash('Backup could not be created (database file missing).', 'error')
+    except Exception as exc:
+        flash(f'Backup failed: {exc}', 'error')
+    return redirect(url_for('backups'))
+
+
+@app.route('/backups/download/<path:filename>')
+@login_required
+@admin_required
+def download_backup(filename):
+    # Prevent path traversal — only allow our dated backup files.
+    if not re.fullmatch(r'pos-backup-\d{4}-\d{2}-\d{2}\.db', filename):
+        abort(404)
+    path = get_backup_dir() / filename
+    if not path.is_file():
+        abort(404)
+    return send_file(path, as_attachment=True, download_name=filename)
 
 
 @app.route('/manage_users')

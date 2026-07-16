@@ -69,6 +69,7 @@
                 <td>{{ customer.email }}</td>
                 <td>
                     <a href="{{ url_for('customer_report', customer_id=customer.id) }}" class="report-link">View History</a>
+                    <a href="{{ url_for('edit_customer', customer_id=customer.id) }}" class="report-link" style="background-color:#007bff;">Edit</a>
 
                     {% if current_user.role == 'Admin' %}
                         {% if customer.id > 1 %}
