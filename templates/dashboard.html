@@ -3,7 +3,6 @@
 {% block title %}Dashboard{% endblock %}
 
 {% block content %}
-    <!-- We are reusing the exact same styles and HTML from before, just inside the block -->
     <style>
         .header { margin-bottom: 2em; }
         .header h1 { margin: 0; }
@@ -11,11 +10,21 @@
         .card { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .card h2 { margin-top: 0; color: #333; }
         .metric { font-size: 2.5em; font-weight: bold; color: #0056b3; }
-        .nav-card a { display: block; background-color: #007bff; color: white; text-decoration: none; padding: 15px; margin-bottom: 10px; border-radius: 5px; text-align: center; font-weight: bold; }
-        .nav-card a:hover { background-color: #0056b3; }
-        .low-stock-list { padding-left: 0; }
+        .low-stock-list { padding-left: 0; margin-bottom: 0.75rem; }
         .low-stock-list li { list-style-type: none; padding: 5px 0; border-bottom: 1px solid #eee; }
         .low-stock-list span { color: #dc3545; font-weight: bold; }
+        .low-stock-meta { font-size: 0.9em; color: #555; margin-bottom: 0.75rem; }
+        .view-more-link {
+            display: inline-block;
+            margin-top: 0.5rem;
+            background-color: #0077b6;
+            color: #fff !important;
+            text-decoration: none;
+            padding: 8px 14px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        .view-more-link:hover { background-color: #005b8a; color: #fff !important; }
     </style>
 
     <div class="header">
@@ -35,16 +44,23 @@
         </div>
         {% endif %}
 
-        <!-- We can remove the "Quick Actions" card now, as those links are in the main navbar! -->
-
         <div class="card">
             <h2>Low Stock Items</h2>
             {% if low_stock_items %}
+                <p class="low-stock-meta">
+                    Showing {{ low_stock_items|length }} of {{ low_stock_total }}
+                    (qty &le; {{ low_stock_threshold }}). Newest low-stock first.
+                </p>
                 <ul class="low-stock-list">
                     {% for item in low_stock_items %}
                         <li>{{ item.name }} - <span>Only {{ item.quantity }} left!</span></li>
                     {% endfor %}
                 </ul>
+                {% if low_stock_total > low_stock_preview_limit %}
+                    <a class="view-more-link" href="{{ url_for('low_stock_list') }}">View more</a>
+                {% else %}
+                    <a class="view-more-link" href="{{ url_for('low_stock_list') }}">View full list / Download PDF</a>
+                {% endif %}
             {% else %}
                 <p>No items are currently low on stock. Well done!</p>
             {% endif %}

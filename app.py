@@ -17,6 +17,9 @@ from catalog_categories import CATALOG_CATEGORIES
 
 load_dotenv()
 
+LOW_STOCK_THRESHOLD = 10
+LOW_STOCK_PREVIEW_LIMIT = 10
+
 PHONE_PATTERN = re.compile(r'^0[17]\d{8}$')
 EMAIL_PATTERN = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
 ACCEPTABLE_EMAIL_EXAMPLES = [
@@ -129,6 +132,7 @@ def init_db():
             price INTEGER NOT NULL DEFAULT 0,
             buying_price REAL DEFAULT 0,
             quantity INTEGER NOT NULL DEFAULT 0,
+            low_stock_since DATETIME,
             category_id INTEGER,
             FOREIGN KEY (category_id) REFERENCES categories (id)
         );
@@ -278,10 +282,210 @@ def ensure_products_has_buying_price_column():
     conn.close()
 
 
+def ensure_products_has_low_stock_since_column():
+    conn = get_db_connection()
+    cols = conn.execute('PRAGMA table_info(products)').fetchall()
+    existing = {c['name'] for c in cols}
+    if 'low_stock_since' not in existing:
+        conn.execute('ALTER TABLE products ADD COLUMN low_stock_since DATETIME')
+        conn.commit()
+    # Backfill existing low-stock rows so sorting works immediately
+    now = datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+    conn.execute(
+        f'''
+        UPDATE products
+        SET low_stock_since = ?
+        WHERE quantity <= ? AND low_stock_since IS NULL
+        ''',
+        (now, LOW_STOCK_THRESHOLD),
+    )
+    conn.execute(
+        f'''
+        UPDATE products
+        SET low_stock_since = NULL
+        WHERE quantity > ?
+        ''',
+        (LOW_STOCK_THRESHOLD,),
+    )
+    conn.commit()
+    conn.close()
+
+
+def _now_eat() -> str:
+    return datetime.now(ZoneInfo("Africa/Nairobi")).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def sync_product_low_stock_marker(conn, product_id: int, previous_quantity: int | None = None):
+    """
+    Keep low_stock_since accurate:
+    - set when stock first drops to <= threshold
+    - clear when stock rises above threshold
+    """
+    row = conn.execute(
+        'SELECT quantity, low_stock_since FROM products WHERE id = ?',
+        (product_id,),
+    ).fetchone()
+    if row is None:
+        return
+
+    qty = row['quantity']
+    if qty <= LOW_STOCK_THRESHOLD:
+        entered_low = previous_quantity is None or previous_quantity > LOW_STOCK_THRESHOLD
+        if entered_low or row['low_stock_since'] is None:
+            conn.execute(
+                'UPDATE products SET low_stock_since = ? WHERE id = ?',
+                (_now_eat(), product_id),
+            )
+    else:
+        if row['low_stock_since'] is not None:
+            conn.execute(
+                'UPDATE products SET low_stock_since = NULL WHERE id = ?',
+                (product_id,),
+            )
+
+
+def fetch_low_stock_items(conn, limit: int | None = None):
+    sql = '''
+        SELECT id, sku, name, quantity, low_stock_since
+        FROM products
+        WHERE quantity <= ?
+        ORDER BY
+            CASE WHEN low_stock_since IS NULL THEN 1 ELSE 0 END,
+            low_stock_since DESC,
+            quantity ASC,
+            name ASC
+    '''
+    params: list = [LOW_STOCK_THRESHOLD]
+    if limit is not None:
+        sql += ' LIMIT ?'
+        params.append(limit)
+    return conn.execute(sql, params).fetchall()
+
+
+def count_low_stock_items(conn) -> int:
+    row = conn.execute(
+        'SELECT COUNT(*) AS total FROM products WHERE quantity <= ?',
+        (LOW_STOCK_THRESHOLD,),
+    ).fetchone()
+    return row['total'] if row else 0
+
+
+def _pdf_safe_text(value: str) -> str:
+    """Normalize common plumbing symbols for PDF Latin-1 text."""
+    text = value or ''
+    replacements = {
+        '½': '1/2',
+        '¼': '1/4',
+        '¾': '3/4',
+        '″': '"',
+        '”': '"',
+        '“': '"',
+        '’': "'",
+        '‘': "'",
+        '…': '...',
+        '–': '-',
+        '—': '-',
+        '\\': '',
+        '(': '[',
+        ')': ']',
+    }
+    for src, dest in replacements.items():
+        text = text.replace(src, dest)
+    return text.encode('latin-1', 'replace').decode('latin-1')
+
+
+def build_low_stock_pdf(items) -> bytes:
+    """Build a simple multi-page PDF without extra dependencies."""
+    header_lines = [
+        'Aqua Tech - Low Stock List',
+        f'Generated: {_now_eat()} (EAT)',
+        f'Threshold: quantity <= {LOW_STOCK_THRESHOLD}',
+        f'Total items: {len(items)}',
+        '',
+        f"{'SKU':<16} {'QTY':>4}  {'LOW SINCE':<19}  PRODUCT",
+        '-' * 90,
+    ]
+    row_lines = []
+    for item in items:
+        sku = _pdf_safe_text(item['sku'] or '-')[:16]
+        name = _pdf_safe_text(item['name'] or '')[:48]
+        since = str(item['low_stock_since'] or '-')[:19]
+        qty = str(item['quantity'])
+        row_lines.append(f'{sku:<16} {qty:>4}  {since:<19}  {name}')
+
+    all_lines = header_lines + row_lines
+    lines_per_page = 48
+    pages = [all_lines[i:i + lines_per_page] for i in range(0, max(len(all_lines), 1), lines_per_page)]
+    if not pages:
+        pages = [['(no items)']]
+
+    objects = []
+    objects.append(b'1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj\n')
+
+    page_object_nums = []
+    content_object_nums = []
+    next_obj = 3
+    for _ in pages:
+        page_object_nums.append(next_obj)
+        content_object_nums.append(next_obj + 1)
+        next_obj += 2
+    font_obj = next_obj
+
+    kids = ' '.join(f'{n} 0 R' for n in page_object_nums)
+    objects.append(
+        f'2 0 obj<< /Type /Pages /Kids [{kids}] /Count {len(pages)} >>endobj\n'.encode('latin-1')
+    )
+
+    for page_num, (page_obj, content_obj) in enumerate(zip(page_object_nums, content_object_nums), start=1):
+        page_lines = pages[page_num - 1]
+        content_cmds = ['BT', '/F1 10 Tf', '50 780 Td', '14 TL']
+        for idx, line in enumerate(page_lines):
+            safe = _pdf_safe_text(line)
+            if idx == 0:
+                content_cmds.append(f'({safe}) Tj')
+            else:
+                content_cmds.append(f'T* ({safe}) Tj')
+        content_cmds.append('ET')
+        stream = '\n'.join(content_cmds).encode('latin-1')
+        objects.append(
+            (
+                f'{page_obj} 0 obj<< /Type /Page /Parent 2 0 R '
+                f'/MediaBox [0 0 612 792] /Contents {content_obj} 0 R '
+                f'/Resources << /Font << /F1 {font_obj} 0 R >> >> >>endobj\n'
+            ).encode('latin-1')
+        )
+        objects.append(
+            f'{content_obj} 0 obj<< /Length {len(stream)} >>stream\n'.encode('latin-1')
+            + stream
+            + b'\nendstream\nendobj\n'
+        )
+
+    objects.append(
+        f'{font_obj} 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>endobj\n'.encode('latin-1')
+    )
+
+    pdf = bytearray(b'%PDF-1.4\n')
+    offsets = [0]
+    for obj in objects:
+        offsets.append(len(pdf))
+        pdf.extend(obj)
+
+    xref_pos = len(pdf)
+    pdf.extend(f'xref\n0 {len(offsets)}\n'.encode('latin-1'))
+    pdf.extend(b'0000000000 65535 f \n')
+    for off in offsets[1:]:
+        pdf.extend(f'{off:010d} 00000 n \n'.encode('latin-1'))
+    pdf.extend(
+        f'trailer<< /Size {len(offsets)} /Root 1 0 R >>\nstartxref\n{xref_pos}\n%%EOF\n'.encode('latin-1')
+    )
+    return bytes(pdf)
+
+
 # Order matters: full schema first, then migrations for older DBs, then audit table.
 init_db()
 ensure_sales_has_cashier_username_column()
 ensure_products_has_buying_price_column()
+ensure_products_has_low_stock_since_column()
 ensure_audit_logs_table()
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -314,9 +518,48 @@ def dashboard():
     conn = get_db_connection()
     sales_today = conn.execute("SELECT SUM(total_amount) AS total FROM sales WHERE date(timestamp) = date('now', 'localtime')").fetchone()['total'] or 0
     total_debt = conn.execute("SELECT SUM(total_amount) AS total FROM sales WHERE payment_status = 'On Credit'").fetchone()['total'] or 0
-    low_stock_items = conn.execute('SELECT name, quantity FROM products WHERE quantity <= 10 ORDER BY quantity ASC').fetchall()
+    low_stock_total = count_low_stock_items(conn)
+    low_stock_items = fetch_low_stock_items(conn, limit=LOW_STOCK_PREVIEW_LIMIT)
     conn.close()
-    return render_template('dashboard.html', sales_today=sales_today, total_debt=total_debt, low_stock_items=low_stock_items)
+    return render_template(
+        'dashboard.html',
+        sales_today=sales_today,
+        total_debt=total_debt,
+        low_stock_items=low_stock_items,
+        low_stock_total=low_stock_total,
+        low_stock_preview_limit=LOW_STOCK_PREVIEW_LIMIT,
+        low_stock_threshold=LOW_STOCK_THRESHOLD,
+    )
+
+
+@app.route('/low_stock')
+@login_required
+def low_stock_list():
+    conn = get_db_connection()
+    items = fetch_low_stock_items(conn)
+    total = len(items)
+    conn.close()
+    return render_template(
+        'low_stock.html',
+        items=items,
+        total=total,
+        low_stock_threshold=LOW_STOCK_THRESHOLD,
+    )
+
+
+@app.route('/low_stock/download')
+@login_required
+def low_stock_download():
+    conn = get_db_connection()
+    items = fetch_low_stock_items(conn)
+    conn.close()
+    pdf_bytes = build_low_stock_pdf(items)
+    filename = f"low_stock_list_{_now_eat().replace(' ', '_').replace(':', '')}.pdf"
+    return Response(
+        pdf_bytes,
+        mimetype='application/pdf',
+        headers={'Content-Disposition': f'attachment; filename={filename}'},
+    )
 
 # --- WORKER-ACCESSIBLE ROUTES ---
 #the following are what could be accessed by both the admin and the workers.
@@ -350,8 +593,19 @@ def process_sale():
     for product_id, item_details in cart_data.items():
         quantity_sold = item_details['quantity']
         price_per_unit = item_details['price']
-        cursor.execute('INSERT INTO sale_items (sale_id, product_id, quantity_sold, price_per_unit) VALUES (?, ?, ?, ?)',(sale_id, product_id, quantity_sold, price_per_unit))
-        cursor.execute('UPDATE products SET quantity = quantity - ? WHERE id = ?',(quantity_sold, product_id))
+        previous = cursor.execute(
+            'SELECT quantity FROM products WHERE id = ?', (product_id,)
+        ).fetchone()
+        previous_qty = previous['quantity'] if previous else None
+        cursor.execute(
+            'INSERT INTO sale_items (sale_id, product_id, quantity_sold, price_per_unit) VALUES (?, ?, ?, ?)',
+            (sale_id, product_id, quantity_sold, price_per_unit),
+        )
+        cursor.execute(
+            'UPDATE products SET quantity = quantity - ? WHERE id = ?',
+            (quantity_sold, product_id),
+        )
+        sync_product_low_stock_marker(conn, int(product_id), previous_quantity=previous_qty)
     conn.commit()
     conn.close()
     audit_log(
@@ -520,6 +774,7 @@ def add_product():
     new_product_id = cursor.lastrowid
     generated_sku = f"{category_code}-{name_part}-{new_product_id}"
     conn.execute('UPDATE products SET sku = ? WHERE id = ?', (generated_sku, new_product_id))
+    sync_product_low_stock_marker(conn, new_product_id, previous_quantity=None)
     conn.commit()
     conn.close()
     return redirect(url_for('products'))
@@ -1052,10 +1307,12 @@ def restock_product(product_id):
             conn.close()
             return redirect(url_for('restock_product', product_id=product_id))
 
+        previous_qty = product['quantity']
         conn.execute(
             'UPDATE products SET quantity = quantity + ? WHERE id = ?',
             (amount, product_id),
         )
+        sync_product_low_stock_marker(conn, product_id, previous_quantity=previous_qty)
         conn.commit()
         conn.close()
         audit_log(
