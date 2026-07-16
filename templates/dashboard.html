@@ -25,6 +25,23 @@
             font-weight: 500;
         }
         .view-more-link:hover { background-color: #005b8a; color: #fff !important; }
+        .quick-actions {
+            margin-top: 1.75rem;
+        }
+        .new-sale-btn {
+            display: inline-block;
+            background-color: #198754;
+            color: #fff !important;
+            text-decoration: none;
+            padding: 14px 28px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 1.05rem;
+        }
+        .new-sale-btn:hover {
+            background-color: #146c43;
+            color: #fff !important;
+        }
     </style>
 
     <div class="header">
@@ -65,5 +82,9 @@
                 <p>No items are currently low on stock. Well done!</p>
             {% endif %}
         </div>
+    </div>
+
+    <div class="quick-actions">
+        <a class="new-sale-btn" href="{{ url_for('sales') }}">New Sale</a>
     </div>
 {% endblock %}

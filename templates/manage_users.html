@@ -8,16 +8,28 @@
         th, td { border: 1px solid #dddddd; text-align: left; padding: 8px; }
         tr:nth-child(even) { background-color: #f2f2f2; }
         h1, h2 { color: #333; }
-        form { background-color: #f9f9f9; padding: 20px; border-radius: 5px; border: 1px solid #ddd; margin-bottom: 2em;}
+        form.add-user-form { background-color: #f9f9f9; padding: 20px; border-radius: 5px; border: 1px solid #ddd; margin-bottom: 2em;}
         input[type=text], input[type=password], select { width: 100%; padding: 8px; margin: 6px 0; display: inline-block; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
         input[type=submit] { background-color: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
         input[type=submit]:hover { background-color: #0056b3; }
+        .action-link { margin-right: 12px; }
+        .delete-btn {
+            background: none;
+            border: none;
+            color: #dc3545;
+            cursor: pointer;
+            text-decoration: underline;
+            padding: 0;
+            font: inherit;
+        }
+        .delete-btn:hover { color: #a71d2a; }
+        .inline-form { display: inline; }
     </style>
 
     <h1>User Management</h1>
 
     <h2>Add New User</h2>
-    <form action="{{ url_for('add_user') }}" method="post">
+    <form class="add-user-form" action="{{ url_for('add_user') }}" method="post">
         <label for="username">Username:</label>
         <input type="text" id="username" name="username" required>
         <label for="password">Password:</label>
@@ -46,9 +58,16 @@
                 <td>{{ user.role }}</td>
                 <td>
                     {% if user.id != current_user.id %}
-                    <a href="{{ url_for('reset_user_password', user_id=user.id) }}">Set new password</a>
+                    <a class="action-link" href="{{ url_for('reset_user_password', user_id=user.id) }}">Set new password</a>
                     {% else %}
                     <span style="color:#666;">Use “Change password” in the menu</span>
+                    {% endif %}
+
+                    {% if user.role == 'Worker' %}
+                    <form class="inline-form" action="{{ url_for('delete_user', user_id=user.id) }}" method="post"
+                          onsubmit="return confirm('Delete worker “{{ user.username }}”? This cannot be undone.');">
+                        <button type="submit" class="delete-btn">Delete</button>
+                    </form>
                     {% endif %}
                 </td>
             </tr>
@@ -56,4 +75,3 @@
         </tbody>
     </table>
 {% endblock %}
-

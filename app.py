@@ -1242,6 +1242,42 @@ def add_user():
     return redirect(url_for('manage_users'))
 
 
+@app.route('/delete_user/<int:user_id>', methods=['POST'])
+@login_required
+@admin_required
+def delete_user(user_id):
+    if user_id == current_user.id:
+        flash('You cannot delete your own account.', 'error')
+        return redirect(url_for('manage_users'))
+
+    conn = get_db_connection()
+    target = conn.execute(
+        'SELECT id, username, role FROM users WHERE id = ?',
+        (user_id,),
+    ).fetchone()
+
+    if target is None:
+        conn.close()
+        abort(404)
+
+    if target['role'] != 'Worker':
+        conn.close()
+        flash('Only Worker accounts can be deleted from this page.', 'error')
+        return redirect(url_for('manage_users'))
+
+    conn.execute('DELETE FROM users WHERE id = ?', (user_id,))
+    conn.commit()
+    conn.close()
+    audit_log(
+        'user_deleted',
+        entity_type='user',
+        entity_id=user_id,
+        details=f"username={target['username']}; role={target['role']}",
+    )
+    flash(f"Worker “{target['username']}” has been deleted.", 'success')
+    return redirect(url_for('manage_users'))
+
+
 #the following two functions; i have addded them for the sole purpose of being able to make some edits on our products and such,
 #since nothing is fully fully permanent.
 
