@@ -148,7 +148,12 @@
         {% if current_user.role == 'Admin' %}
             <a href="{{ url_for('products') }}">Products</a>
             <a href="{{ url_for('reports') }}">Reports</a>
-            <a href="{{ url_for('debt_report') }}">Debt Report</a>
+            <a href="{{ url_for('debt_report') }}">
+                Debt Report
+                {% if nav_open_debt_count is defined and nav_open_debt_count > 0 %}
+                    <span style="background:#d62828;color:#fff;border-radius:10px;padding:1px 7px;font-size:0.75em;margin-left:4px;">{{ nav_open_debt_count }}</span>
+                {% endif %}
+            </a>
             <a href="{{ url_for('audit_logs') }}">Audit Logs</a>
             <a href="{{ url_for('manage_users') }}">Users</a>
             <a href="{{ url_for('change_my_password') }}">Change password</a>

@@ -516,20 +516,124 @@ def logout():
 @login_required
 def dashboard():
     conn = get_db_connection()
-    sales_today = conn.execute("SELECT SUM(total_amount) AS total FROM sales WHERE date(timestamp) = date('now', 'localtime')").fetchone()['total'] or 0
-    total_debt = conn.execute("SELECT SUM(total_amount) AS total FROM sales WHERE payment_status = 'On Credit'").fetchone()['total'] or 0
+
+    sales_today_amount = conn.execute(
+        "SELECT COALESCE(SUM(total_amount), 0) AS total FROM sales WHERE date(timestamp) = date('now', 'localtime')"
+    ).fetchone()['total'] or 0
+
+    transactions_today = conn.execute(
+        "SELECT COUNT(*) AS total FROM sales WHERE date(timestamp) = date('now', 'localtime')"
+    ).fetchone()['total'] or 0
+
+    stock_ok_count = conn.execute(
+        'SELECT COUNT(*) AS total FROM products WHERE quantity > ?',
+        (LOW_STOCK_THRESHOLD,),
+    ).fetchone()['total'] or 0
+
     low_stock_total = count_low_stock_items(conn)
+    low_stock_banner_items = fetch_low_stock_items(conn, limit=3)
     low_stock_items = fetch_low_stock_items(conn, limit=LOW_STOCK_PREVIEW_LIMIT)
+
+    payment_rows = conn.execute(
+        '''
+        SELECT payment_status,
+               COUNT(*) AS sale_count,
+               COALESCE(SUM(total_amount), 0) AS amount
+        FROM sales
+        WHERE date(timestamp) = date('now', 'localtime')
+        GROUP BY payment_status
+        '''
+    ).fetchall()
+    payment_today = {
+        'Paid': {'sale_count': 0, 'amount': 0},
+        'On Credit': {'sale_count': 0, 'amount': 0},
+    }
+    for row in payment_rows:
+        status = row['payment_status']
+        if status in payment_today:
+            payment_today[status] = {
+                'sale_count': row['sale_count'],
+                'amount': row['amount'],
+            }
+
+    debt_rows = conn.execute(
+        '''
+        SELECT
+            (s.total_amount - COALESCE(SUM(p.amount_paid), 0)) AS balance
+        FROM sales s
+        LEFT JOIN payments p ON s.id = p.sale_id
+        WHERE s.payment_status = 'On Credit'
+        GROUP BY s.id
+        HAVING balance > 0
+        '''
+    ).fetchall()
+    open_debt_count = len(debt_rows)
+    total_debt = sum(row['balance'] for row in debt_rows)
+
+    sales_today_list = conn.execute(
+        '''
+        SELECT
+            s.id,
+            s.timestamp,
+            s.total_amount,
+            s.payment_status,
+            s.cashier_username,
+            c.name AS customer_name,
+            (
+                SELECT GROUP_CONCAT(p.name || ' x' || si.quantity_sold, ', ')
+                FROM sale_items si
+                JOIN products p ON p.id = si.product_id
+                WHERE si.sale_id = s.id
+            ) AS products_summary
+        FROM sales s
+        JOIN customers c ON s.customer_id = c.id
+        WHERE date(s.timestamp) = date('now', 'localtime')
+        ORDER BY s.timestamp DESC
+        '''
+    ).fetchall()
+
     conn.close()
     return render_template(
         'dashboard.html',
-        sales_today=sales_today,
+        sales_today=sales_today_amount,
+        transactions_today=transactions_today,
         total_debt=total_debt,
+        open_debt_count=open_debt_count,
+        stock_ok_count=stock_ok_count,
         low_stock_items=low_stock_items,
+        low_stock_banner_items=low_stock_banner_items,
         low_stock_total=low_stock_total,
         low_stock_preview_limit=LOW_STOCK_PREVIEW_LIMIT,
         low_stock_threshold=LOW_STOCK_THRESHOLD,
+        payment_today=payment_today,
+        sales_today_list=sales_today_list,
+        today_label=_now_eat()[:10],
     )
+
+
+@app.context_processor
+def inject_nav_badges():
+    """Debt count badge for admin navbar on every page."""
+    if not getattr(current_user, 'is_authenticated', False):
+        return {}
+    if getattr(current_user, 'role', None) != 'Admin':
+        return {}
+    try:
+        conn = get_db_connection()
+        rows = conn.execute(
+            '''
+            SELECT (s.total_amount - COALESCE(SUM(p.amount_paid), 0)) AS balance
+            FROM sales s
+            LEFT JOIN payments p ON s.id = p.sale_id
+            WHERE s.payment_status = 'On Credit'
+            GROUP BY s.id
+            HAVING balance > 0
+            '''
+        ).fetchall()
+        conn.close()
+        return {'nav_open_debt_count': len(rows)}
+    except Exception:
+        return {'nav_open_debt_count': 0}
 
 
 @app.route('/low_stock')

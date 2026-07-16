@@ -4,19 +4,109 @@
 
 {% block content %}
     <style>
-        .header { margin-bottom: 2em; }
+        .header {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 1.25rem;
+        }
         .header h1 { margin: 0; }
-        .dashboard-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
-        .card { background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .card h2 { margin-top: 0; color: #333; }
-        .metric { font-size: 2.5em; font-weight: bold; color: #0056b3; }
-        .low-stock-list { padding-left: 0; margin-bottom: 0.75rem; }
-        .low-stock-list li { list-style-type: none; padding: 5px 0; border-bottom: 1px solid #eee; }
-        .low-stock-list span { color: #dc3545; font-weight: bold; }
-        .low-stock-meta { font-size: 0.9em; color: #555; margin-bottom: 0.75rem; }
+        .header-meta { color: #555; margin: 0.35rem 0 0; }
+        .record-sale-btn {
+            display: inline-block;
+            background-color: #0077b6;
+            color: #fff !important;
+            text-decoration: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .record-sale-btn:hover { background-color: #005b8a; color: #fff !important; }
+
+        .low-stock-banner {
+            background: #fff8e6;
+            border: 1px solid #f0c36d;
+            border-left: 5px solid #e09b1b;
+            border-radius: 6px;
+            padding: 12px 16px;
+            margin-bottom: 1.25rem;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 0.75rem;
+            align-items: center;
+        }
+        .low-stock-banner strong { color: #9a6700; }
+        .low-stock-banner a { font-weight: 600; }
+
+        .dashboard-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 1.5rem;
+        }
+        .card {
+            background-color: white;
+            padding: 18px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+            border-bottom: 4px solid #caf0f8;
+        }
+        .card.accent-teal { border-bottom-color: #0077b6; }
+        .card.accent-amber { border-bottom-color: #e09b1b; }
+        .card.accent-coral { border-bottom-color: #d62828; }
+        .card.accent-green { border-bottom-color: #198754; }
+        .card h2 {
+            margin: 0 0 0.4rem;
+            color: #555;
+            font-size: 0.95rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+        .metric { font-size: 1.85em; font-weight: bold; color: #16324f; margin: 0; }
+        .metric-sub { color: #666; margin: 0.35rem 0 0; font-size: 0.9rem; }
+
+        .section-card {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+            padding: 18px;
+            margin-bottom: 1.25rem;
+        }
+        .section-card h2 { margin-top: 0; color: #16324f; }
+
+        .payment-mix {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+        }
+        .payment-pill {
+            background: #f4f9fc;
+            border: 1px solid #e1e7f0;
+            border-radius: 8px;
+            padding: 14px;
+        }
+        .payment-pill .label { color: #555; font-size: 0.9rem; }
+        .payment-pill .value { font-size: 1.35rem; font-weight: 700; color: #16324f; margin-top: 4px; }
+
+        .sales-table-wrap { overflow-x: auto; }
+        .empty-sales {
+            text-align: center;
+            color: #666;
+            padding: 1.5rem;
+            background: #f8fcff;
+            border: 1px dashed #c5d4e3;
+            border-radius: 6px;
+        }
+        .status-paid { color: #198754; font-weight: 600; }
+        .status-credit { color: #d62828; font-weight: 600; }
         .view-more-link {
             display: inline-block;
-            margin-top: 0.5rem;
+            margin-top: 0.75rem;
             background-color: #0077b6;
             color: #fff !important;
             text-decoration: none;
@@ -25,66 +115,145 @@
             font-weight: 500;
         }
         .view-more-link:hover { background-color: #005b8a; color: #fff !important; }
-        .quick-actions {
-            margin-top: 1.75rem;
-        }
-        .new-sale-btn {
-            display: inline-block;
-            background-color: #198754;
-            color: #fff !important;
-            text-decoration: none;
-            padding: 14px 28px;
-            border-radius: 6px;
-            font-weight: 600;
-            font-size: 1.05rem;
-        }
-        .new-sale-btn:hover {
-            background-color: #146c43;
-            color: #fff !important;
-        }
+        .low-stock-list { padding-left: 0; margin: 0; }
+        .low-stock-list li { list-style: none; padding: 6px 0; border-bottom: 1px solid #eee; }
+        .low-stock-list span { color: #dc3545; font-weight: bold; }
     </style>
 
     <div class="header">
-        <h1>Aqua Tech Limited</h1>
-        <p>Where we solve all your building and water problems with genuine products</p>
+        <div>
+            <h1>Today's Summary</h1>
+            <p class="header-meta">{{ today_label }} · Aqua Tech Limited</p>
+        </div>
+        <a class="record-sale-btn" href="{{ url_for('sales') }}">+ Record Sale</a>
     </div>
+
+    {% if low_stock_total > 0 %}
+    <div class="low-stock-banner">
+        <div>
+            <strong>{{ low_stock_total }} LOW STOCK</strong>
+            —
+            {% for item in low_stock_banner_items %}
+                {{ item.name }}{% if not loop.last %}, {% endif %}
+            {% endfor %}
+            {% if low_stock_total > low_stock_banner_items|length %}…{% endif %}
+        </div>
+        <a href="{{ url_for('low_stock_list') }}">View list</a>
+    </div>
+    {% endif %}
 
     <div class="dashboard-container">
-        {% if current_user.role == 'Admin' %}
-        <div class="card">
-            <h2>Total Sales Today</h2>
-            <p class="metric">Ksh. {{ sales_today }}</p>
+        <div class="card accent-teal">
+            <h2>Transactions Today</h2>
+            <p class="metric">{{ transactions_today }}</p>
+            <p class="metric-sub">
+                {% if transactions_today == 0 %}
+                    No sales recorded today
+                {% else %}
+                    Ksh. {{ '%.2f'|format(sales_today) }} total
+                {% endif %}
+            </p>
         </div>
-        <div class="card">
-            <h2>Total Outstanding Debt</h2>
-            <p class="metric">Ksh. {{ total_debt }}</p>
+
+        <div class="card accent-amber">
+            <h2>Items in Stock</h2>
+            <p class="metric">{{ stock_ok_count }}</p>
+            <p class="metric-sub">Above minimum (qty &gt; {{ low_stock_threshold }})</p>
+        </div>
+
+        <div class="card accent-coral">
+            <h2>Items Low / Out</h2>
+            <p class="metric">{{ low_stock_total }}</p>
+            <p class="metric-sub">
+                {% if low_stock_total == 0 %}All stock healthy{% else %}Needs attention{% endif %}
+            </p>
+        </div>
+
+        {% if current_user.role == 'Admin' %}
+        <div class="card accent-green">
+            <h2>Open Client Debts</h2>
+            <p class="metric">{{ open_debt_count }}</p>
+            <p class="metric-sub">Ksh. {{ '%.2f'|format(total_debt) }} outstanding</p>
         </div>
         {% endif %}
+    </div>
 
-        <div class="card">
-            <h2>Low Stock Items</h2>
-            {% if low_stock_items %}
-                <p class="low-stock-meta">
-                    Showing {{ low_stock_items|length }} of {{ low_stock_total }}
-                    (qty &le; {{ low_stock_threshold }}). Newest low-stock first.
-                </p>
-                <ul class="low-stock-list">
-                    {% for item in low_stock_items %}
-                        <li>{{ item.name }} - <span>Only {{ item.quantity }} left!</span></li>
-                    {% endfor %}
-                </ul>
-                {% if low_stock_total > low_stock_preview_limit %}
-                    <a class="view-more-link" href="{{ url_for('low_stock_list') }}">View more</a>
-                {% else %}
-                    <a class="view-more-link" href="{{ url_for('low_stock_list') }}">View full list / Download PDF</a>
-                {% endif %}
-            {% else %}
-                <p>No items are currently low on stock. Well done!</p>
-            {% endif %}
+    <div class="section-card">
+        <h2>Today's Sales by Payment</h2>
+        <div class="payment-mix">
+            <div class="payment-pill">
+                <div class="label">Paid</div>
+                <div class="value">{{ payment_today['Paid'].sale_count }} sales</div>
+                <div class="metric-sub">Ksh. {{ '%.2f'|format(payment_today['Paid'].amount) }}</div>
+            </div>
+            <div class="payment-pill">
+                <div class="label">On Credit</div>
+                <div class="value">{{ payment_today['On Credit'].sale_count }} sales</div>
+                <div class="metric-sub">Ksh. {{ '%.2f'|format(payment_today['On Credit'].amount) }}</div>
+            </div>
         </div>
+        <p class="metric-sub" style="margin-top: 0.85rem;">
+            Profit chart will be added after selling prices are set on the catalogue.
+        </p>
     </div>
 
-    <div class="quick-actions">
-        <a class="new-sale-btn" href="{{ url_for('sales') }}">New Sale</a>
+    <div class="section-card">
+        <h2>All Sales Today</h2>
+        {% if sales_today_list %}
+        <div class="sales-table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Time</th>
+                        <th>Customer</th>
+                        <th>Product</th>
+                        <th>Total</th>
+                        <th>Payment</th>
+                        <th>By</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sale in sales_today_list %}
+                    <tr>
+                        <td>{{ sale.id }}</td>
+                        <td>{{ sale.timestamp[11:16] if sale.timestamp and sale.timestamp|length >= 16 else sale.timestamp }}</td>
+                        <td>{{ sale.customer_name }}</td>
+                        <td>{{ sale.products_summary or '-' }}</td>
+                        <td>Ksh. {{ '%.2f'|format(sale.total_amount) }}</td>
+                        <td>
+                            {% if sale.payment_status == 'Paid' %}
+                                <span class="status-paid">Paid</span>
+                            {% else %}
+                                <span class="status-credit">On Credit</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ sale.cashier_username or '-' }}</td>
+                        <td><a href="{{ url_for('sale_receipt', sale_id=sale.id) }}">Receipt</a></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+            <div class="empty-sales">
+                No sales today — tap <a href="{{ url_for('sales') }}">+ Record Sale</a> to add one.
+            </div>
+        {% endif %}
     </div>
+
+    {% if low_stock_total > 0 %}
+    <div class="section-card">
+        <h2>Low Stock Preview</h2>
+        <ul class="low-stock-list">
+            {% for item in low_stock_items %}
+                <li>{{ item.name }} — <span>{{ item.quantity }} left</span></li>
+            {% endfor %}
+        </ul>
+        <a class="view-more-link" href="{{ url_for('low_stock_list') }}">
+            {% if low_stock_total > low_stock_preview_limit %}View more / Download PDF{% else %}Full list / Download PDF{% endif %}
+        </a>
+    </div>
+    {% endif %}
 {% endblock %}
