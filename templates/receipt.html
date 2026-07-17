@@ -4,37 +4,25 @@
 
 {% block content %}
     <style>
-        .receipt-wrapper {
-            max-width: 440px;
-            margin: 0 auto;
-        }
+        .receipt-wrapper { max-width: 440px; margin: 0 auto; }
         .receipt-card {
-            background-color: #ffffff;
+            background: var(--surface);
             padding: 1.5rem;
-            border-radius: 8px;
-            box-shadow: 0 2px 6px rgba(15, 52, 96, 0.12);
+            border-radius: 10px;
+            box-shadow: var(--shadow-md);
             font-size: 0.9rem;
-            color: #111;
+            color: var(--text-main);
+            border: 1px solid var(--border);
         }
         .receipt-header {
             text-align: center;
             margin-bottom: 1rem;
-            border-bottom: 1px dashed #ccc;
+            border-bottom: 1px dashed var(--border-strong);
             padding-bottom: 0.75rem;
         }
-        .receipt-header h1 {
-            margin: 0;
-            font-size: 1.35rem;
-            letter-spacing: 0.02em;
-        }
-        .receipt-header p {
-            margin: 3px 0;
-            color: #333;
-        }
-        .receipt-meta {
-            margin-bottom: 0.8rem;
-            font-size: 0.85rem;
-        }
+        .receipt-header h1 { margin: 0; font-size: 1.35rem; letter-spacing: 0.02em; }
+        .receipt-header p { margin: 3px 0; color: var(--text-muted); }
+        .receipt-meta { margin-bottom: 0.8rem; font-size: 0.85rem; }
         .receipt-meta div {
             display: flex;
             justify-content: space-between;
@@ -45,35 +33,24 @@
             width: 100%;
             border-collapse: collapse;
             margin: 0.5rem 0 0.8rem 0;
+            box-shadow: none;
         }
-        .items-table th,
-        .items-table td {
-            border-bottom: 1px solid #e1e7f0;
+        .items-table th, .items-table td {
+            border-bottom: 1px solid var(--border);
             padding: 5px 4px;
             font-size: 0.82rem;
             vertical-align: top;
         }
-        .items-table th {
-            background-color: #f1f7fb;
-            text-align: left;
-        }
+        .items-table th { background: var(--accent-soft); text-align: left; }
         .items-table .num { text-align: right; white-space: nowrap; }
-        .sku { color: #666; font-size: 0.75rem; }
+        .sku { color: var(--text-muted); font-size: 0.75rem; }
         .totals {
             margin-top: 0.5rem;
-            border-top: 1px dashed #ccc;
+            border-top: 1px dashed var(--border-strong);
             padding-top: 0.5rem;
         }
-        .totals div {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 3px;
-        }
-        .totals div.total-line {
-            font-weight: bold;
-            font-size: 1.05rem;
-            margin-top: 4px;
-        }
+        .totals div { display: flex; justify-content: space-between; margin-bottom: 3px; }
+        .totals div.total-line { font-weight: bold; font-size: 1.05rem; margin-top: 4px; }
         .status-badge {
             display: inline-block;
             padding: 2px 8px;
@@ -81,14 +58,15 @@
             font-size: 0.75rem;
             font-weight: 600;
         }
-        .status-paid { background: #d4edda; color: #155724; }
-        .status-credit { background: #f8d7da; color: #721c24; }
+        .badge-paid { background: var(--success-bg); color: var(--success-text); }
+        .badge-credit { background: var(--danger-bg); color: var(--danger-text); }
         .thankyou {
             margin-top: 1rem;
             text-align: center;
             font-size: 0.85rem;
-            border-top: 1px dashed #ccc;
+            border-top: 1px dashed var(--border-strong);
             padding-top: 0.75rem;
+            color: var(--text-muted);
         }
         .print-actions {
             text-align: center;
@@ -98,41 +76,11 @@
             justify-content: center;
             flex-wrap: wrap;
         }
-        .btn-secondary {
-            background-color: #6c757d;
-            color: #fff;
-            border: none;
-            border-radius: 4px;
-            padding: 0.5rem 1.1rem;
-            cursor: pointer;
-            text-decoration: none;
-            font-weight: 500;
-        }
-
         @media print {
-            .navbar,
-            .print-actions,
-            .flash,
-            .content > div:has(.btn-primary) {
-                display: none !important;
-            }
-            body {
-                background: #ffffff !important;
-            }
-            .content {
-                padding: 0 !important;
-                margin: 0 !important;
-                max-width: none !important;
-            }
-            .receipt-wrapper {
-                margin: 0;
-                max-width: none;
-            }
-            .receipt-card {
-                box-shadow: none;
-                border-radius: 0;
-                padding: 0;
-            }
+            .receipt-card { background: #fff !important; color: #000 !important; border: none !important; box-shadow: none !important; }
+            .items-table th { background: #f1f7fb !important; }
+            .badge-paid { background: #d4edda !important; color: #155724 !important; }
+            .badge-credit { background: #f8d7da !important; color: #721c24 !important; }
         }
     </style>
 
@@ -159,9 +107,9 @@
                     <span>
                         <strong>Status</strong>
                         {% if sale.payment_status == 'Paid' %}
-                            <span class="status-badge status-paid">Paid</span>
+                            <span class="status-badge badge-paid">Paid</span>
                         {% else %}
-                            <span class="status-badge status-credit">On Credit</span>
+                            <span class="status-badge badge-credit">On Credit</span>
                         {% endif %}
                     </span>
                     <span><strong>Served by</strong> {{ sale.cashier_username or '-' }}</span>
@@ -215,7 +163,7 @@
         </div>
 
         <div class="print-actions">
-            <button class="btn-primary" onclick="window.print()">Print Receipt</button>
+            <button class="action-btn" onclick="window.print()">Print Receipt</button>
             <a class="btn-secondary" href="{{ url_for('sales') }}">New Sale</a>
             <a class="btn-secondary" href="{{ url_for('dashboard') }}">Dashboard</a>
         </div>

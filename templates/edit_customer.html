@@ -3,40 +3,10 @@
 {% block title %}Edit Customer{% endblock %}
 
 {% block content %}
-    <style>
-        form {
-            background-color: #f9f9f9;
-            padding: 20px;
-            border-radius: 5px;
-            border: 1px solid #ddd;
-            max-width: 560px;
-        }
-        input[type=text], input[type=email], input[type=tel] {
-            width: 100%;
-            padding: 8px;
-            margin: 6px 0;
-            display: inline-block;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-        input[type=submit] {
-            background-color: #007bff;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        .field-hint { font-size: 0.9em; color: #555; margin-top: -4px; margin-bottom: 8px; }
-        .field-error { color: #dc3545; font-size: 0.85em; display: none; margin-top: -4px; margin-bottom: 8px; }
-        .back-link { display: inline-block; margin-bottom: 1rem; }
-    </style>
-
-    <a class="back-link" href="{{ url_for('customers') }}">← Back to customers</a>
+    <a href="{{ url_for('customers') }}" class="btn-secondary" style="margin-bottom:1rem;">← Back to customers</a>
     <h1>Edit Customer</h1>
 
-    <form action="{{ url_for('edit_customer', customer_id=customer.id) }}" method="post" id="edit-customer-form">
+    <form class="page-form" action="{{ url_for('edit_customer', customer_id=customer.id) }}" method="post" id="edit-customer-form" style="max-width:560px;">
         <label for="name">Customer Name:</label>
         <input type="text" id="name" name="name" value="{{ customer.name }}"
                {% if customer.id == 1 %}readonly{% else %}required{% endif %}>
@@ -85,7 +55,6 @@
             let valid = true;
             phoneError.style.display = 'none';
             emailError.style.display = 'none';
-
             const phoneVal = phoneInput.value.trim();
             const skipPhone = isWalkIn && (phoneVal === '' || phoneVal.toUpperCase() === 'N/A');
             if (!skipPhone && phoneVal && !phonePattern.test(phoneVal)) {

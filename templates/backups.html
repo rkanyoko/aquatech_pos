@@ -3,32 +3,15 @@
 {% block title %}Database Backups{% endblock %}
 
 {% block content %}
-    <style>
-        .hint { color: #555; margin-bottom: 1rem; }
-        .actions { margin-bottom: 1.25rem; }
-        .btn-run {
-            background: #0077b6;
-            color: #fff;
-            border: none;
-            padding: 10px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: 500;
-        }
-        .btn-run:hover { background: #005b8a; }
-    </style>
-
     <h1>Database Backups</h1>
-    <p class="hint">
+    <p class="field-hint">
         A dated backup is created automatically once per day while the system is in use.
         The newest {{ keep_count }} backups are kept. You can also create one now and download any file.
     </p>
 
-    <div class="actions">
-        <form action="{{ url_for('run_backup_now') }}" method="post" style="display:inline;">
-            <button type="submit" class="btn-run">Backup now</button>
-        </form>
-    </div>
+    <form action="{{ url_for('run_backup_now') }}" method="post" style="margin-bottom:1.25rem;">
+        <button type="submit" class="action-btn">Backup now</button>
+    </form>
 
     {% if backups %}
     <table>
@@ -52,6 +35,8 @@
         </tbody>
     </table>
     {% else %}
-        <p>No backups yet. Click <strong>Backup now</strong> or use the app today and one will be created automatically.</p>
+        <div class="empty-state">
+            No backups yet. Click <strong>Backup now</strong> or use the app today and one will be created automatically.
+        </div>
     {% endif %}
 {% endblock %}

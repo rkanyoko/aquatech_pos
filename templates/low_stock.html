@@ -3,50 +3,17 @@
 {% block title %}Low Stock List{% endblock %}
 
 {% block content %}
-    <style>
-        .page-header {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: space-between;
-            align-items: center;
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
-        .page-header h1 { margin: 0; }
-        .actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
-        .btn-download {
-            background-color: #198754;
-            color: #fff !important;
-            text-decoration: none;
-            padding: 0.55rem 1rem;
-            border-radius: 4px;
-            font-weight: 500;
-        }
-        .btn-download:hover { background-color: #146c43; color: #fff !important; }
-        .btn-back {
-            background-color: #6c757d;
-            color: #fff !important;
-            text-decoration: none;
-            padding: 0.55rem 1rem;
-            border-radius: 4px;
-            font-weight: 500;
-        }
-        .btn-back:hover { background-color: #5a6268; color: #fff !important; }
-        .meta { color: #555; margin-bottom: 1rem; }
-        .qty-low { color: #dc3545; font-weight: bold; }
-    </style>
-
     <div class="page-header">
         <div>
             <h1>Low Stock Items</h1>
-            <p class="meta">
+            <p class="page-header-meta">
                 {{ total }} item{{ 's' if total != 1 else '' }} with quantity &le; {{ low_stock_threshold }}.
                 Newest low-stock entries appear first.
             </p>
         </div>
-        <div class="actions">
-            <a class="btn-back" href="{{ url_for('dashboard') }}">Back to Dashboard</a>
-            <a class="btn-download" href="{{ url_for('low_stock_download') }}">Download list</a>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+            <a class="btn-secondary" href="{{ url_for('dashboard') }}">Back to Dashboard</a>
+            <a class="action-btn success" href="{{ url_for('low_stock_download') }}">Download list</a>
         </div>
     </div>
 
@@ -65,13 +32,13 @@
             <tr>
                 <td>{{ item.sku or '-' }}</td>
                 <td>{{ item.name }}</td>
-                <td class="qty-low">{{ item.quantity }}</td>
+                <td class="status-credit">{{ item.quantity }}</td>
                 <td>{{ item.low_stock_since or '-' }}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
     {% else %}
-        <p>No items are currently low on stock.</p>
+        <div class="empty-state">No items are currently low on stock.</div>
     {% endif %}
 {% endblock %}

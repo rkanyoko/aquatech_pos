@@ -3,24 +3,10 @@
 {% block title %}Manage Customers{% endblock %}
 
 {% block content %}
-    <style>
-        table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #dddddd; text-align: left; padding: 8px; }
-        tr:nth-child(even) { background-color: #f2f2f2; }
-        h1, h2 { color: #333; }
-        form { background-color: #f9f9f9; padding: 20px; border-radius: 5px; border: 1px solid #ddd; margin-bottom: 2em;}
-        input[type=text], input[type=email], input[type=tel] { width: 100%; padding: 8px; margin: 6px 0; display: inline-block; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        input[type=submit] { background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
-        .report-link { background-color: #17a2b8; color: white; padding: 5px 10px; border-radius: 4px; text-decoration: none; display: inline-block; margin-right: 5px; }
-        .delete-btn { background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
-        .field-hint { font-size: 0.9em; color: #555; margin-top: -4px; margin-bottom: 8px; }
-        .field-error { color: #dc3545; font-size: 0.85em; display: none; margin-top: -4px; margin-bottom: 8px; }
-    </style>
-
     <h1>Customer Management</h1>
 
     <h2>Add New Customer</h2>
-    <form action="/add_customer" method="post" id="customer-form">
+    <form class="page-form" action="/add_customer" method="post" id="customer-form">
         <label for="name">Customer Name:</label>
         <input type="text" id="name" name="name" required>
 
@@ -46,9 +32,9 @@
     </form>
 
     <h2>Search Customers</h2>
-    <form method="get" style="margin-bottom: 1em;">
+    <form method="get" class="page-form" style="padding:1rem;">
         <input type="text" name="q" value="{{ search }}" placeholder="Name, phone, or email">
-        <input type="submit" value="Search">
+        <input type="submit" value="Search" style="width:auto;">
     </form>
 
     <h2>Existing Customers</h2>
@@ -68,15 +54,13 @@
                 <td>{{ customer.phone }}</td>
                 <td>{{ customer.email }}</td>
                 <td>
-                    <a href="{{ url_for('customer_report', customer_id=customer.id) }}" class="report-link">View History</a>
-                    <a href="{{ url_for('edit_customer', customer_id=customer.id) }}" class="report-link" style="background-color:#007bff;">Edit</a>
+                    <a href="{{ url_for('customer_report', customer_id=customer.id) }}" class="action-btn info" style="padding:0.35rem 0.65rem;font-size:0.85rem;">History</a>
+                    <a href="{{ url_for('edit_customer', customer_id=customer.id) }}" class="action-btn" style="padding:0.35rem 0.65rem;font-size:0.85rem;">Edit</a>
 
-                    {% if current_user.role == 'Admin' %}
-                        {% if customer.id > 1 %}
-                        <form action="{{ url_for('delete_customer', customer_id=customer.id) }}" method="post" style="display: inline;" onsubmit="return confirm('WARNING: Deleting this customer will also delete all their sales and payment history. This cannot be undone. Are you sure?');">
-                            <button type="submit" class="delete-btn">Delete</button>
-                        </form>
-                        {% endif %}
+                    {% if current_user.role == 'Admin' and customer.id > 1 %}
+                    <form action="{{ url_for('delete_customer', customer_id=customer.id) }}" method="post" style="display:inline;" onsubmit="return confirm('WARNING: Deleting this customer will also delete all their sales and payment history. This cannot be undone. Are you sure?');">
+                        <button type="submit" class="btn-danger" style="padding:0.35rem 0.65rem;font-size:0.85rem;">Delete</button>
+                    </form>
                     {% endif %}
                 </td>
             </tr>
@@ -100,7 +84,6 @@
             let valid = true;
             phoneError.style.display = 'none';
             emailError.style.display = 'none';
-
             if (phoneInput.value && !phonePattern.test(phoneInput.value)) {
                 phoneError.style.display = 'block';
                 valid = false;
@@ -109,9 +92,7 @@
                 emailError.style.display = 'block';
                 valid = false;
             }
-            if (!valid) {
-                event.preventDefault();
-            }
+            if (!valid) event.preventDefault();
         });
     </script>
 {% endblock %}
